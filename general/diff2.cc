@@ -81,21 +81,22 @@ int dothejob(int* buf, int* wcounts, int id, int vs, const vector<double>& wsize
         int hptr = 0;
         par->init();
 
-        // Make runRepairPartitioning(...) into par->fragment(...) 
-        runRepairPartitioning(versions, IDsToWords, offsetsAllVersions, versionPartitionSizes, associations, minFragSize, repairStoppingPoint, false);
-        runRepairPartitioning(versions, IDsToWords, offsetsAllVersions, versionPartitionSizes, associations, minFragSize, repairStoppingPoint, false);
-        par->fragment(buf, wcounts, trees);
+        // TODO Make runRepairPartitioning(...) into par->fragment(...) 
+        // runRepairPartitioning(versions, IDsToWords, offsetsAllVersions, versionPartitionSizes, associations, minFragSize, repairStoppingPoint, false);
+        // par->fragment(buf, wcounts, trees);
 
         for ( int i = 0; i < vs; i++) // for each version (so i is version number)
         {
+            // TODO To figure out wsizes and total, see "/data4/jhe/proximity/model/test/%d"
             if ( wcounts[i] > 0 )
                 par->fragment(i, &buf[wptr], wcounts[i], &mhbuf[hptr], &hbuf[hptr],  &trees[i], wsizes, total);
-            wptr += wcounts[i]; // 0, 
-            if (wcounts[i] > B)
+            wptr += wcounts[i]; // number of fragments in all versions so far
+            if (wcounts[i] > B) // some hash logic, not needed for repair
             {
                 hptr += (wcounts[i]-B+1);
             }
 
+            // Will have to be called internally for each tree (that is, for each version. I don't yet fully know what a tree here is)
             trees[i].complete();
         }
 

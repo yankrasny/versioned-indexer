@@ -317,56 +317,57 @@ public:
         My version of fragment, works on all versions at once using RePair
 
         Params
-            int** buf: the contents of all the versions
+            int* buf becomes int** buf: the contents of all the versions
+
 
         Objectives
             Set bound_buf (same as offsetsAllVersions)
-            Set root (object type: iv, see iv.h)
+            Set root (object type: iv, see iv.h): Looks like inverted list!
 
     */
-    int fragment(int* buf, int* versionSizes, int numVersions, iv* root, unsigned minFragSize, unsigned repairStoppingPoint)
-    {
-        // Convert buf and versionSizes into a vector of vectors
-        // Choosing to do this instead of changing the Repair code
-        vector<vector<unsigned> > versions = vector<vector<unsigned> >();
-        int current(0);
-        for (int i = 0; i < numVersions; i++)
-        {
-            versions[i] = <vector<unsigned>();
-            for (int j = current; j < versionSizes[i]; j++)
-            {
-                versions[i].push_back(buf[j]);
-            }
-            current = versionSizes[i];
-        }
+    // int fragmentUsingRepair(int* buf, int* versionSizes, int numVersions, iv* root, unsigned minFragSize, unsigned repairStoppingPoint)
+    // {
+    //     // Convert buf and versionSizes into a vector of vectors
+    //     // Choosing to do this instead of changing the Repair code
+    //     vector<vector<unsigned> > versions = vector<vector<unsigned> >();
+    //     int current(0);
+    //     for (int i = 0; i < numVersions; i++)
+    //     {
+    //         versions[i] = <vector<unsigned>();
+    //         for (int j = current; j < versionSizes[i]; j++)
+    //         {
+    //             versions[i].push_back(buf[j]);
+    //         }
+    //         current = versionSizes[i];
+    //     }
 
-        // Keeping my own variables for sanity
-        vector<Association> associations;
-        unsigned* offsetsAllVersions(NULL);
-        unsigned* versionPartitionSizes(NULL);
+    //     // Keeping my own variables for sanity
+    //     vector<Association> associations;
+    //     unsigned* offsetsAllVersions(NULL);
+    //     unsigned* versionPartitionSizes(NULL);
 
-        // Run Repair
-        double score = runRepairPartitioning(versions, offsetsAllVersions, versionPartitionSizes, associations, minFragSize, repairStoppingPoint);
+    //     // Run Repair
+    //     double score = runRepairPartitioning(versions, offsetsAllVersions, versionPartitionSizes, associations, minFragSize, repairStoppingPoint);
 
-        // Set the variables that Jinru needs
-        bound_buf = offsetsAllVersions;
-        offsetsAllVersions = NULL;
+    //     // Set the variables that Jinru needs
+    //     bound_buf = offsetsAllVersions;
+    //     offsetsAllVersions = NULL;
 
-        // TODO what about versionPartitionSizes? Ask Jinru.
+    //     // TODO what about versionPartitionSizes? Ask Jinru.
 
-        // Do we want to use our scoring scheme or his? 
-            // Ours for now. Just check out how he does it below, you see he runs a cutting alg inside the while loop, and we can do the same.
-                // Now we know what total_level is: it's the amount of iterations he's willing to optimize for, aka the # of times he calls the cutting alg
-
-
+    //     // Do we want to use our scoring scheme or his? 
+    //         // Ours for now. Just check out how he does it below, you see he runs a cutting alg inside the while loop, and we can do the same.
+    //             // Now we know what total_level is: it's the amount of iterations he's willing to optimize for, aka the # of times he calls the cutting alg
 
 
-        return 0;
-    }
+
+
+    //     return 0;
+    // }
 
     /*
 
-        We need to make repair produce these variables -yan
+        We need to make repair set these variables -yan
 
         Example of wcounts, the size of each version. This means that version 0 contains 50 words, version 1 contains 52 words, etc.
         wcounts = [50, 52, 55, 49, 55]
@@ -376,9 +377,11 @@ public:
         int len: the length of the current version (wordIDs.size())
         int* mhbuf: hash stuff that I don't need
         int* hbuf: hash stuff that I don't need
-        iv* root: passed as &trees[i]
-        int* w_size: 
-        int wlen: 
+        iv* root: passed as &trees[i] (inverted list but why is it called root?)
+        int* w_size:
+        int wlen: size of w_size
+
+        par->fragment(i, &buf[wptr], wcounts[i], &mhbuf[hptr], &hbuf[hptr],  &trees[i], wsizes, total);
 
     */
     int fragment(int vid, int* refer, int len, int* mhbuf, int* hbuf, iv* root, int* w_size, int wlen) {
@@ -391,6 +394,24 @@ public:
         int block_num = 0;
         int error;
         int ep;
+
+        /*
+        TODO define:
+            w_size
+            bound_buf: the partition boundary buffer
+            total_level: the amount of iterations he's willing to optimize for, aka the # of times he calls the cutting alg
+            md5_buf: a buffer for storing fragment hashes?
+            type p (posting?)
+            infos: an array of finfo
+            block_info2
+
+        Sources:
+            docCutter.cut()
+            docCutter.cut3()
+            this class's vars
+
+
+        */
 
         int merge_size = 1;
         block_num = docCutter.cut(mhbuf, hbuf, len, w_size[wlen-1], bound_buf);
@@ -419,9 +440,12 @@ public:
                 lh = *((unsigned *)digest + 1) ;
                 ins = lookupHash (lh, hh, h[0]);
 
+                // Didn't find hash for this fragment
                 if (ins == -1) {
                     p p1;
                     p1.vid = vid;
+
+                    // TODO this can tell you a lot
                     p1.offset = block_info2[j].start;
                     p1.isVoid = false;
 
@@ -433,6 +457,7 @@ public:
                     fptr.ptr = ptr;
                     fptr.off = infos[ptr].size;
 
+                    // TODO what's nptr? look at the insert() function
                     p1.nptr = root->insert(fptr, block_info2[j].start, ep);
 
                     if ( p1.nptr != -1){
@@ -453,7 +478,7 @@ public:
                         fID++;
                     }
                 }
-                else { //has sharing block
+                else { // has sharing block (or fragment as I call it -YK)
 
                     frag_ptr fptr;
                     fptr.ptr = ins;
@@ -557,17 +582,17 @@ private:
      * ***********************/
     hStruct *          h[W_SET];
     unsigned*          maxid; 
-    unsigned*          currid; 
-    int*               bound_buf;       //the partition boundary buffer
-    unsigned*          md5_buf; 
-    finfo*             infos;
-    finfo*             infos2;
-    frag_ptr*          fbuf;
-    int**              refer_ptrs;
-    unsigned char**    refer_ptrs2;
-    unsigned*          id_trans;
-    unsigned*          selected_buf;
-    unsigned char*     tpbuf;
+    unsigned*          currid;          // current ID of ...
+    int*               bound_buf;       // the partition boundary buffer
+    unsigned*          md5_buf;         // 
+    finfo*             infos;           // an array of finfo
+    finfo*             infos2;          // an array of finfo
+    frag_ptr*          fbuf;            // an array of frag_ptr
+    int**              refer_ptrs;      // versions (so each inner array is like wordIDs for one version)
+    unsigned char**    refer_ptrs2;     // versions (so each inner array is like wordIDs for one version)
+    unsigned*          id_trans;        // 
+    unsigned*          selected_buf;    //
+    unsigned char*     tpbuf;           // 
 };
 
 #endif /* PARTITION_H_ */
