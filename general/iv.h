@@ -50,8 +50,10 @@ public:
     iv()
     {
         nID = 0;
+
         nbuf = new node[1000000];
         sort_nbuf = new node[1000000];
+        inlist = NULL;
     }
 
     ~iv()

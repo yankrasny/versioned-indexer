@@ -5,3 +5,6 @@ all:
 
 optimized:
 	g++ diff2_repair.cc libhash.a $(SOURCES) -o diff2_repair -O3 -std=c++0x
+
+profile:
+	g++ diff2_repair.cc libhash.a $(SOURCES) -o diff2_repair -pg -std=c++0x

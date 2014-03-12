@@ -5,13 +5,13 @@
  *      Author: jhe
  */
 
-#include        <cstdio>
-#include        <cstdlib>
-#include        <cstring>
-#include        <map>
-#include	<iterator>
-#include	<fstream>
-#include	<vector>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <map>
+#include <iterator>
+#include <fstream>
+#include <vector>
 
 #define	MAXSIZE 81985059 			/*  */
 

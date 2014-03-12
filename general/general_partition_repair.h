@@ -25,7 +25,7 @@
 #include "Repair-Partitioning/prototype/RepairPartitioningPrototype.h"
 
 #define MAXDIS 20000000
-#define MAX_NUM_WORDS_PER_DOC 20000
+#define MAX_NUM_WORDS_PER_DOC 200000
 
 using namespace std;
 struct node;
@@ -69,13 +69,58 @@ struct posting
 
 template<typename T>
 class partitions {
+
 private:
-    int total_level; // TODO where is this initialized?
+    int load_global() {
+        FILE* f = fopen("maxid", "rb");
+        int size;
+        fread(&size, sizeof(unsigned), 1, f);
+        maxid = new unsigned[size];
+        currid = new unsigned[size];
+        fread(maxid, sizeof(unsigned), size, f);
+        fclose(f);
+
+        currid[0] = 0;
+        for (int i = 1; i < size; i++)
+        {
+            currid[i] = currid[i-1]+maxid[i-1];
+        }
+
+    }
+
+    int ptr;
+    int fID;
+    heap myheap;
+    static const unsigned W_SET = 4;
+    md5_state_t state;
+    md5_byte_t digest[16];
+    FILE* ffrag; //the file to write meta inforation
+    FILE* fbase_frag;
+
+    // T docCutter;
+
+    /**************************
+     * buffer used in the class
+     * ***********************/
+    hStruct *          h[W_SET];
+    unsigned*          maxid; 
+    unsigned*          currid;          // current ID of ...
+    int*               bound_buf;       // the partition boundary buffer
+    unsigned*          md5_buf;         // 
+    finfo*             infos;           // an array of finfo
+    finfo*             infos2;          // an array of finfo
+    frag_ptr*          fbuf;            // an array of frag_ptr
+    int**              refer_ptrs;      // versions (so each inner array is like wordIDs for one version)
+    unsigned char**    refer_ptrs2;     // versions (so each inner array is like wordIDs for one version)
+    unsigned*          id_trans;        // 
+    unsigned*          selected_buf;    //
+    unsigned char*     tpbuf;           // 
+
+    // int total_level; // TODO where is this initialized?
+
 public:
-    partitions(int para, int maxblock, int blayer, int pTotal) : 
-        myheap(MAXDIS), 
-        // docCutter(para, maxblock, blayer),
-        total_level(pTotal)
+    partitions(int para = 0, int maxblock = 0, int blayer = 0, int pTotal = 0) : 
+        myheap(MAXDIS)
         {
             selected_buf = new unsigned[MAXDIS];
             fbuf = new frag_ptr[5000000];
@@ -103,29 +148,32 @@ public:
         }
 
     ~partitions(){
+        delete [] selected_buf;
+
+        // TODO add all the delete [] that the previous author forgot.
+        // "Forgot..." I hate that. I have to assume that's what happened.
+
         delete[] fbuf;
         fclose(ffrag);
         fclose(fbase_frag);
     }
-    void exitEarly(){
-        delete[] fbuf;
-        fclose(ffrag);
-        fclose(fbase_frag);
-    }
+
     void completeCount(double wsize)
     {
         myheap.init();
-        for ( int i = 0; i < ptr; i++)
+        for (int i = 0; i < ptr; i++)
         {
             infos[i].size = infos[i].items.size();
         }
 
-        for ( int i = 0; i < ptr; i++)
+        for (int i = 0; i < ptr; i++)
         {
             for (vector<p>::iterator its = infos[i].items.begin(); its != infos[i].items.end(); its++)
+            {
                 its->isVoid = false;
+            }
 
-            infos[i].score = static_cast<double>(infos[i].len*infos[i].size) /(1+infos[i].len+wsize*(1+infos[i].size)); 
+            infos[i].score = static_cast<double>(infos[i].len * infos[i].size) / (1 + infos[i].len + wsize * (1 + infos[i].size)); 
             hpost ite;
             ite.ptr = i;
             ite.score = infos[i].score;
@@ -139,10 +187,15 @@ public:
         int ptr2 = 1;
         while ( ptr2 < len)
         {
-            while ( ptr2 < len && fi[ptr2] == fi[ptr1])
+            while (ptr2 < len && fi[ptr2] == fi[ptr1])
+            {
                 ptr2++;
-            if ( ptr2==len)
+            }
+            
+            if (ptr2 == len)
+            {
                 break;
+            }
             else
             {
                 ptr1++;
@@ -150,23 +203,24 @@ public:
                 ptr2++;
             }
         }
-        return ptr1+1;
+        return ptr1 + 1;
     }
 
     int select_ptr;
     void select(iv* root, double wsize)
     {
         select_ptr = 0;
-        while ( myheap.size()>0)
+        while (myheap.size() > 0)
         {
             hpost po = myheap.top();
             selected_buf[select_ptr++] = po.ptr;
             myheap.pop();
             int idx = po.ptr;
             int cptr = 0;
-            for ( vector<p>::iterator its = infos[idx].items.begin(); its != infos[idx].items.end(); its++)
+            for (vector<p>::iterator its = infos[idx].items.begin(); its != infos[idx].items.end(); its++)
             {
-                if ( its->isVoid == false){
+                if ( its->isVoid == false)
+                {
                     infos2[idx].items.push_back(*its);
                     int len = root[its->vid].find_conflict(its->nptr, infos[idx].items, po.ptr, &fbuf[cptr]);
                     cptr += len;
@@ -175,21 +229,24 @@ public:
             infos2[idx].size = infos2[idx].items.size();
             infos2[idx].len = infos[idx].len;
 
-            if ( cptr > 0 ){
+            if (cptr > 0)
+            {
                 sort(fbuf, fbuf+cptr, comparep);
                 cptr = compact(fbuf, cptr);
-                for ( int i = 0; i < cptr; i++){
-
+                for (int i = 0; i < cptr; i++)
+                {
                     int idx = fbuf[i].ptr;
-                    if ( i>0 && fbuf[i].ptr != fbuf[i-1].ptr){
+                    if (i > 0 && fbuf[i].ptr != fbuf[i-1].ptr)
+                    {
                         int idx2 = fbuf[i-1].ptr;
-                        if (infos[idx2].size >0)
+                        if (infos[idx2].size > 0)
                         {
                             infos[idx2].score = infos[idx2].len*infos[idx2].size /(1+infos[idx2].len+wsize*(1+infos[idx2].size));
                             myheap.UpdateKey(idx2, infos[idx2].score);
                         }
                     }
-                    if ( infos[idx].items.at(fbuf[i].off).isVoid == false){
+                    if (infos[idx].items.at(fbuf[i].off).isVoid == false)
+                    {
                         infos[idx].size--;
                         infos[idx].items.at(fbuf[i].off).isVoid = true;
                         if ( infos[idx].size == 0)
@@ -197,10 +254,10 @@ public:
                     }
                 }
 
-                idx = fbuf[cptr-1].ptr;
+                idx = fbuf[cptr - 1].ptr;
                 if (infos[idx].size > 0)
                 {
-                    infos[idx].score = infos[idx].len*infos[idx].size /(1+infos[idx].len+wsize*(1+infos[idx].size));
+                    infos[idx].score = infos[idx].len * infos[idx].size / (1 + infos[idx].len + wsize * (1 + infos[idx].size));
                     myheap.UpdateKey(idx, infos[idx].score);
                 }
             }
@@ -208,13 +265,13 @@ public:
 
     }
 
-    void finish3(int* refer, int* wcounts, int id, int vs)
+    void finish3(int* refer, int* versionSizes, int id, int vs)
     {
         int start = 0;
         for ( int i = 0; i < vs; i++)
         {
             refer_ptrs[i] = &refer[start];
-            start += wcounts[i];
+            start += versionSizes[i];
         }
 
         add_list_len = 0;
@@ -248,28 +305,32 @@ public:
             infos2[myidx].items.clear();
         }
 
-        for ( int i = 0; i < vs; i++)
+        for (int i = 0; i < vs; i++)
+        {
             fprintf(fbase_frag, "%d\n", base_frag);
+        }
 
         base_frag += select_ptr;
         fwrite(vbuf, sizeof(unsigned char), vbuf_ptr-vbuf, ffrag);
 
-        for ( int i = 0; i < ptr; i++){
+        for (int i = 0; i < ptr; i++)
+        {
             infos[i].size = 0;
             infos[i].items.clear();
         }
     }
 
-    void PushBlockInfo(int* refer, int* wcounts, int id, int vs, binfo* bis)
+    void PushBlockInfo(vector<vector<unsigned> >& versions, int id, binfo* bis)
     {
-        if ( tpbuf ==NULL)
+        if (tpbuf == NULL) {
             tpbuf = new unsigned char[MAXSIZE];
+        }
 
         int start = 0;
-        for ( int i = 0; i < vs; i++)
+        for (int i = 0; i < vs; i++)
         {
             refer_ptrs2[i] = &tpbuf[start];
-            start += wcounts[i];
+            start += versionSizes[i];
         }
         memset(tpbuf, 0, start);
 
@@ -278,19 +339,22 @@ public:
         int total = 0;
         bis->total_dis = select_ptr;
         int total_post = 0;
-        for ( int i = 0; i < select_ptr; i++)
+        for (int i = 0; i < select_ptr; i++)
         {
             int myidx = selected_buf[i];
-            total+= infos2[myidx].items.size();
+            total += infos2[myidx].items.size();
             total_post += infos2[myidx].len;
 
-            for ( vector<p>::iterator its = infos2[myidx].items.begin(); its!=infos2[myidx].items.end(); its++){
+            for (vector<p>::iterator its = infos2[myidx].items.begin(); its != infos2[myidx].items.end(); its++)
+            {
                 int version = its->vid;
                 int off = its->offset;
                 int len = infos2[myidx].len;
-                if (!its->isVoid){
-                    for ( int j = off; j < off+len; j++){
-                        if ( refer_ptrs2[version][j] > 0)
+                if (!its->isVoid)
+                {
+                    for (int j = off; j < off+len; j++)
+                    {
+                        if (refer_ptrs2[version][j] > 0)
                         {
                             FILE* ferror = fopen("ERROR", "w");
                             fprintf(ferror, "we got problems!%d, %d, %d\n", id, i, j); // thanks, "we got problems" really helps -YK
@@ -309,68 +373,25 @@ public:
 
         for (int i = 0; i < vs; i++)
         {
-            for (int j = 0; j < wcounts[i]; j++){
+            for (int j = 0; j < versionSizes[i]; j++){
                 if (refer_ptrs2[i][j] < 0) {
                     FILE* ferror = fopen("ERRORS", "w");
                     fprintf(ferror, "at doc:%d, version:%d\tpos:%d\n", id, i, j);
                     fclose(ferror);
-                    // cerr << "See file ERRORS" << endl;
+                    cerr << "See file ERRORS" << endl;
                     exit(0);
                 }
             }
         }
-
     }
-
 
     /*
         Yan's version of cut, works on all versions at once using RePair
     */
-    int cutAllVersions(int* buf, int* versionSizes, int numVersions, 
-        unsigned* offsetsAllVersions,
-        unsigned* versionPartitionSizes,
+    void cutAllVersions(vector<vector<unsigned> >& versions,
+        unsigned* offsetsAllVersions, unsigned* versionPartitionSizes,
         float fragmentationCoefficient, unsigned minFragSize, unsigned method)
     {
-        // Convert buf and versionSizes into a vector of vectors
-        // I chose to do this instead of changing the Repair code
-        // TODO make sure this isn't an issue
-        // TODO count the total number of words in all these versions
-        // Have a cutoff because we haven't reduced our mem usage yet, we'll learn to process these docs soon
-        vector<vector<unsigned> > versions = vector<vector<unsigned> >();
-        int current(0);
-        int maxVersionSize(0);
-        for (int i = 0; i < numVersions; i++)
-        {
-            versions.push_back(vector<unsigned>());
-            // cerr << "Version " << i << endl;
-            for (int j = current; j < current + versionSizes[i]; j++)
-            {
-                /*
-                We need unique symbols for repair to work
-                This puts currentWordID at the highest symbol we've seen, so the next call to nextSymbol() will be a unique ID
-                */
-                if (buf[j] > currentWordID)
-                {
-                    currentWordID = buf[j];
-                }
-
-                // cerr << buf[j] << ",";
-                versions[i].push_back(buf[j]);
-            }
-            // cerr << endl;
-            // system("pause");
-            current += versionSizes[i];
-            if (versionSizes[i] > maxVersionSize) {
-                maxVersionSize = versionSizes[i];
-            }
-        }
-        // if (current > MAX_NUM_WORDS_PER_DOC)
-        // {
-        //     return current;
-        // }
-        cerr << "Max version size: " << maxVersionSize << endl;
-        cerr << "Total # words in doc: " << current << endl;
-
         // This class is used as a wrapper around repair (See RepairPartitioningPrototype.h)
         RepairPartitioningPrototype prototype;
 
@@ -386,7 +407,7 @@ public:
         // Set the variables that Jinru needs
         // Note: converting back to ints
         unsigned totalNumFrags(0);
-        for (int i = 0; i < numVersions; i++)
+        for (int i = 0; i < versions.size(); ++i)
         {
             // cerr << "Total num frags: " << totalNumFrags << endl;
             unsigned numFragsInVersion = versionPartitionSizes[i];
@@ -401,17 +422,14 @@ public:
             }
             totalNumFrags += numFragsInVersion;
         }
-
-        return current;
-
     }
 
     /*
 
         We need to set the same variables as Jinru's fragment (see general_partition.h)
 
-        Example of wcounts, the size of each version. This means that version 0 contains 50 words, version 1 contains 52 words, etc.
-        wcounts = [50, 52, 55, 49, 55]
+        Example of versionSizes, the size of each version. This means that version 0 contains 50 words, version 1 contains 52 words, etc.
+        versionSizes = [50, 52, 55, 49, 55]
 
         int vid: versionID (0, 1, 2, ...)
         int* refer: the contents of the current version (what I call wordIDs)
@@ -439,10 +457,10 @@ public:
             Call trees[v].complete();
 
     */
-    int fragment(int* buf, int* versionSizes, int numVersions, iv* trees, 
+    int fragment(vector<vector<unsigned> >& versions, iv* trees, 
         float fragmentationCoefficient, unsigned minFragSize, unsigned method)
     {
-        if (numVersions == 0)
+        if (versions.size() == 0)
         {
             return 0;
         }
@@ -454,47 +472,33 @@ public:
 
         int merge_size = 1;
         
-        unsigned* versionPartitionSizes = new unsigned[numVersions];
+        unsigned* versionPartitionSizes = new unsigned[versions.size()];
         unsigned* offsetsAllVersions = 
-            new unsigned[numVersions * MAX_NUM_FRAGMENTS_PER_VERSION];
+            new unsigned[versions.size() * MAX_NUM_FRAGMENTS_PER_VERSION];
 
         // Initialize to a known invalid value
-        for (size_t i = 0; i < numVersions; ++i)
+        for (size_t i = 0; i < versions.size(); ++i)
         {
             versionPartitionSizes[i] = MAX_NUM_FRAGMENTS_PER_VERSION + 1;
             // TODO optional: init offsetsAllVersions to 0
         }
 
         // Sets this->bound_buf and versionPartitionSizes
-        int numWords = this->cutAllVersions(buf, versionSizes, numVersions,
+        this->cutAllVersions(versions,
             offsetsAllVersions, versionPartitionSizes,
             fragmentationCoefficient, minFragSize, method);
-
-        if (numWords > MAX_NUM_WORDS_PER_DOC)
-        {
-
-            return -1;
-        }
-
-        unsigned startCurrentVersion(0);
+        
         unsigned totalCountFragments(0);
-        for (int v = 0; v < numVersions; ++v)
+        for (int v = 0; v < versions.size(); ++v)
         {
-            iv* root = &trees[v]; // TODO this can be a source of problems I think -YK
-
-            // TODO I am not confident in this hack. It's just not likely to be this easy.
-            // refer needs to point to buf[start of version i]
-            // start of version i is the sum of the version sizes that came before it
-            startCurrentVersion += versionSizes[v];
-            int* refer = &buf[startCurrentVersion];
-
             unsigned numFragsInVersion = versionPartitionSizes[v];
-
             if (numFragsInVersion == 0)
             {
                 cerr << "Error: Number of fragments in version " << v << " is 0." << endl;
                 return 0;
             }
+
+            iv* root = &trees[v];
 
             for (int j = 0; j < numFragsInVersion - 1; j++)
             {
@@ -518,7 +522,7 @@ public:
                 {
                     for (int l = block_info2[j].start; l < block_info2[j].end; l++)
                     {
-                        md5_buf[l - bound_buf[j]] = refer[l];
+                        md5_buf[l - bound_buf[j]] = versions[v][l];
                     }
 
                     ep = block_info2[j].end;
@@ -594,29 +598,16 @@ public:
                         }
                     }
                 }
-
-                // int prev_num = numFragsInVersion;
-
-                // Just replace this one here with...
-                // Wait, I think our implementation takes care of this
-                // block_num = docCutter.cut3(block_info2, block_num, counts);
-                
-                counts++; // LEAVE THIS! Commenting this out cost me like 4 hours
-                
-                // if (prev_num == numFragsInVersion)
-                //     break;
+                counts++;
             }
             totalCountFragments += numFragsInVersion;
-
-            // TODO I have no idea what this does, but Jinru calls it in diff2.cc "trees[i].complete()", so I will call it here
-            // Probably dumps a buffer to disk or something
             root->complete();
         }
 
         delete [] versionPartitionSizes;
         delete [] offsetsAllVersions;
 
-        return 0;
+        return totalCountFragments;
     }
 
 
@@ -627,12 +618,17 @@ public:
         block_info_ptr = 0;
         ptr = 0;
         fID = 0;
-        if ( h[0]!=NULL)
+
+        if (h[0] != NULL)
+        {
             destroyHash(h[0]);
+        }
+
         h[0] = initHash();
         return 0;
     }
-    //Thomas Wang's 32 bit Mix Function
+
+    // Thomas Wang's 32 bit Mix Function
     inline unsigned char inthash(unsigned key) {
         int c2 = 0x9c6c8f5b; // a prime or an odd constant
         key = key ^ (key >> 15);
@@ -644,6 +640,9 @@ public:
     }
     char fn[256];
     unsigned char* vbuf;
+
+
+
 public:
     posting* add_list;
     unsigned* block_info;
@@ -654,58 +653,16 @@ public:
     unsigned flens_count;
     unsigned base_frag;
 
-
     int dump_frag()
     {
-        for ( int i = 0; i< ptr; i++){
+        for (int i = 0; i< ptr; i++)
+        {
             infos[i].size = 0;
             infos[i].items.clear();
         }
-        ptr =0;
+        ptr = 0;
         return 0;
     }
-private:
-    int load_global(){
-        FILE* f = fopen("maxid", "rb");
-        int size;
-        fread(&size,sizeof(unsigned), 1, f);
-        maxid = new unsigned[size];
-        currid = new unsigned[size];
-        fread(maxid, sizeof(unsigned), size, f);
-        fclose(f);
-
-        currid[0] = 0;
-        for ( int i = 1; i < size; i++)
-            currid[i] = currid[i-1]+maxid[i-1];
-
-    }
-    int ptr;
-    int fID;
-    heap myheap;
-    static const unsigned W_SET = 4;
-    md5_state_t state;
-    md5_byte_t digest[16];
-    FILE* ffrag; //the file to write meta inforation
-    FILE* fbase_frag;
-
-    // T docCutter;
-
-    /**************************
-     * buffer used in the class
-     * ***********************/
-    hStruct *          h[W_SET];
-    unsigned*          maxid; 
-    unsigned*          currid;          // current ID of ...
-    int*               bound_buf;       // the partition boundary buffer
-    unsigned*          md5_buf;         // 
-    finfo*             infos;           // an array of finfo
-    finfo*             infos2;          // an array of finfo
-    frag_ptr*          fbuf;            // an array of frag_ptr
-    int**              refer_ptrs;      // versions (so each inner array is like wordIDs for one version)
-    unsigned char**    refer_ptrs2;     // versions (so each inner array is like wordIDs for one version)
-    unsigned*          id_trans;        // 
-    unsigned*          selected_buf;    //
-    unsigned char*     tpbuf;           // 
 
 };
 
