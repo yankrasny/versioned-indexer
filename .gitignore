@@ -11,3 +11,15 @@
 *.lai
 *.la
 *.a
+
+compression/
+general2/
+Jstar/
+minWinnowing/
+wiki_access/
+util/
+
+general/*.txt
+general/*.xlsx
+*.txt
+*.xlsx

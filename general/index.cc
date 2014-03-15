@@ -85,7 +85,7 @@ int dothejob(int* buf, int* wcounts, int id, int vs, float wsize)
     printf("finish sorting!\n");
     par->completeCount(wsize);
     par->select(trees, wsize);
-    par->finish3(buf, wcounts,id, vs);
+    par->finish3(buf, wcounts, id, vs);
 
     for ( int i = 0; i < par->add_list_len; i++)
     {

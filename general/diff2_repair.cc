@@ -43,17 +43,16 @@ struct CompareFunctor
 #include "general_partition_repair.h"
 
 partitions<CutDocument2>* partitionAlgorithm;
-int dothejob(vector<vector<unsigned> >& versions, int docId, int numVersions, const vector<double>& wsizes2)
+int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double>& wsizes2)
 {
     char fn[256];
-    if (numVersions != 1)
+    if (versions.size() != 1)
     {
         memset(fn, 0, 256);
         sprintf(fn, "/research/run/jhe/proximity/model/test/%d", docId);
         FILE* f = fopen(fn, "r");
 
-        iv* invertedLists = new iv[numVersions];
-
+        iv* invertedLists = new iv[versions.size()];
         partitionAlgorithm->init();
 
         // I think wsizes is window sizes, and total is the size of that array
@@ -64,39 +63,34 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, int numVersions, co
         int numFrags = partitionAlgorithm->fragment(versions, invertedLists, 
             fragmentationCoefficient, minFragSize, numLevelsDown);
         
-        if (numFrags == -1)
+        printf("Finished partitioning!\n");
+
+        // TODO rewrite selection based on your params, not wsizes (window sizes for minnowing alg)
+        // build table for each document recording total number of block and total postings
+        vector<binfo> lbuf;
+        binfo binf;
+        memset(fn, 0, 256);
+        sprintf(fn, "test/%d.2", docId);
+        f = fopen(fn, "w");
+
+        // Iterate over values of the window size param
+        for (int i = 0; i < wsizes2.size(); i++)
         {
-            printf("Warning: doc %d, too large, skipping...\n", docId);
+            double wsize = wsizes2[i];
+
+            partitionAlgorithm->completeCount(wsize);
+
+            partitionAlgorithm->select(invertedLists, wsize);
+
+            // partitionAlgorithm->PushBlockInfo(documentContent, versionSizes, docId, versions.size(), &binf);
+            partitionAlgorithm->PushBlockInfo(versions, docId, &binf);
+
+            binf.wsize = wsize;
+            lbuf.push_back(binf);
+            fprintf(f, "%.2lf\t%d\t%d\t%d\n", wsize, binf.total_dis, binf.total, binf.post);
         }
-        else
-        {
-            printf("Finished sorting!\n");
+        fclose(f);
 
-            // TODO rewrite selection based on your params, not wsizes (window sizes for minnowing alg)
-            // build table for each document recording total number of block and total postings
-            vector<binfo> lbuf;
-            binfo binf;
-            memset(fn, 0, 256);
-            sprintf(fn, "test/%d.2", docId);
-            f = fopen(fn, "w");
-            int length = wsizes2.size();
-            for (int i = 0; i < length; i++)
-            {
-                double wsize = wsizes2[i];
-
-                partitionAlgorithm->completeCount(wsize);
-
-                partitionAlgorithm->select(invertedLists, wsize);
-
-                // partitionAlgorithm->PushBlockInfo(documentContent, versionSizes, docId, numVersions, &binf);
-                partitionAlgorithm->PushBlockInfo(versions, docId, &binf);
-
-                binf.wsize = wsize;
-                lbuf.push_back(binf);
-                fprintf(f, "%.2lf\t%d\t%d\t%d\n", wsize, binf.total_dis, binf.total, binf.post);
-            }
-            fclose(f);
-        }
         partitionAlgorithm->dump_frag();
         delete [] invertedLists;
 
@@ -123,11 +117,11 @@ int main(int argc, char**argv)
 {
     partitionAlgorithm = new partitions<CutDocument2>();
     // int* documentContent = new int[MAXSIZE]; // the contents of one document at a time (the fread below seems to overwrite for each doc)
-
-    FILE* fileWikiComplete = fopen("/data/jhe/wiki_access/completeFile", "rb");
+    
     FILE* fileWikiDocSizes = fopen("/data/jhe/wiki_access/numv", "rb");
     FILE* fileWikiVersionSizes = fopen("/data/jhe/wiki_access/word_size", "rb");
-
+    
+    // FILE* fileWikiComplete = fopen("/data/jhe/wiki_access/completeFile", "rb");
     std::ifstream inputWikiComplete("/data/jhe/wiki_access/completeFile", std::ios::in | std::ifstream::binary);
 
     int docCount;
@@ -158,41 +152,39 @@ int main(int argc, char**argv)
     // Gets populated in the loop below
     // fragmentCounts[i] is the number of fragments in the partitioning doc i
     unsigned* fragmentCounts = new unsigned[docCount];
-    int currentDoc = 0;
     auto versions = vector<vector<unsigned> >();
+    unsigned totalWordsInDoc = 0;
+    unsigned totalWordsInVersion = 0;
+    bool skipThisDoc = false;
 
+    // In this loop, i is the docId
     for (size_t i = 0; i < docCount; ++i) // for each document -YK
     {
-        // Trying to do it this way: http://stackoverflow.com/questions/15143670/how-can-i-use-fread-on-a-binary-file-to-read-the-data-into-a-stdvector
+        // If you're confused about the line that reads into the vector, see: http://stackoverflow.com/questions/15143670/how-can-i-use-fread-on-a-binary-file-to-read-the-data-into-a-stdvector
         auto currentVersion = vector<unsigned>();
-        for (size_t v = 0; v < numVersionsPerDoc[i]; ++v) { // for each version in this doc
+        for (size_t v = 0; v < numVersionsPerDoc[i]; ++v) // for each version in this doc
+        {
+            totalWordsInVersion = versionSizes[numVersionsReadSoFar + v];
+            totalWordsInDoc += totalWordsInVersion;
+            if (totalWordsInDoc > MAX_NUM_WORDS_PER_DOC)
+            {
+                // TODO handle this properly
+                // don't mess up the input stream pointer
+                // clean up any data you are not using
+                // continue to the next doc properly
+                skipThisDoc = true;
+            }
 
-            // TODO add the threshold for total num words here:
-            // if (current > MAX_NUM_WORDS_PER_DOC)
-            // {
-            //     return current;
-            // }
-
-            // Read the correct number of words into currentVersion
-            currentVersion.resize(versionSizes[numVersionsReadSoFar + v]);
+            // Read the contents of the current version into a vector<unsigned>
+            currentVersion.resize(totalWordsInVersion);
             inputWikiComplete.read(reinterpret_cast<char*>(&currentVersion[0]), currentVersion.size() * sizeof(unsigned));
             versions.push_back(currentVersion);
         }
 
-        // // Get the total number of words to read for this doc
-        // int totalNumWordsInDoc = 0; // the number of words in all versions of this doc
-        // for (int j = 0; j < numVersionsPerDoc[i]; j++)
-        // {
-        //     totalNumWordsInDoc += versionSizes[numVersionsReadSoFar + j];
-        // }
-        // // Now read the doc contents from the wiki file
-        // fread(documentContent, sizeof(unsigned), totalNumWordsInDoc, fileWikiComplete);
-
         // Run our partitioning algorithm with several different param values
-        fragmentCounts[currentDoc] = dothejob(versions, i, numVersionsPerDoc[i], wsizes2);
+        fragmentCounts[i] = dothejob(versions, i, wsizes2);
         
         currentWordID = 0; // This is a global used by repair, see repair-algorithm/Util.h
-        currentDoc++;        
         numVersionsReadSoFar += numVersionsPerDoc[i];
 
         for (size_t v = 0; v < numVersionsPerDoc[i]; ++v)
@@ -208,7 +200,8 @@ int main(int argc, char**argv)
     delete [] numVersionsPerDoc;
     delete [] fragmentCounts;
 
-    fclose(fileWikiComplete);
+    // fclose(fileWikiComplete);
+    inputWikiComplete.close();
     fclose(fileWikiDocSizes);
     fclose(fileWikiVersionSizes);
 

@@ -3,10 +3,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "vb.h"
-#include "readwritebits.h"
 #include <list>
 #include <map>
+#include "vb.h"
+#include "readwritebits.h"
 
 using namespace std;
 struct frag_ptr
@@ -17,7 +17,7 @@ struct frag_ptr
 
 bool operator == (const frag_ptr& f1, const frag_ptr& f2)
 {
-    if ( f1.ptr == f2.ptr && f1.off == f2.off)
+    if (f1.ptr == f2.ptr && f1.off == f2.off)
         return true;
     else
         return false;
@@ -38,7 +38,7 @@ int compareiv(const void* a1, const void* a2)
 
     int ret = n1->start - n2->start;
     int ret2 = n1->end - n2->end;
-    if ( ret == 0)
+    if (ret == 0)
         return ret2;
     else
         return ret;
@@ -96,7 +96,7 @@ public:
         nID = id;
         inlist = new list<int>[id];
         nbuf = new node[id];
-        for ( int i = 0; i < id;i++){
+        for (int i = 0; i < id;i++) {
             int size;
             VBYTE_DECODE(buf_ptr, size);
             for ( int j = 0; j < size; j++)
@@ -107,9 +107,10 @@ public:
             }
         }
     }
-/* 
- * insert a fragment information to the inverted list structure
- */
+    
+    /* 
+     * insert a fragment information to the inverted list structure
+     */
     int insert(const frag_ptr& finfo, int start, int end)
     {
         end--;
@@ -119,12 +120,12 @@ public:
         nbuf[nID].nid = nID;
         sort_nbuf[nID] = nbuf[nID];
         nID++;
-        if ( nID > 1000000)
+        if (nID > 1000000)
         {
-            printf("memory out !\n");
+            printf("Out of memory!\n");
             exit(0);
         }
-        return nbuf[nID-1].nid;
+        return nbuf[nID - 1].nid;
     }
 
     bool intersect(const node& n1, const node& n2)
