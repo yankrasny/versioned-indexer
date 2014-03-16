@@ -29,7 +29,7 @@
 
 using namespace std;
 
-// Doesn't seem to be used anywhere, will probably remove
+// See iv.h
 struct node;
  
 // I think this is a fragment application -YK
@@ -37,7 +37,7 @@ struct p
 {
     int vid;
     int offset;
-    int nptr;
+    int nptr; // does this refer to nID in iv.h?
     bool isVoid;
 };
 
@@ -55,6 +55,7 @@ struct finfo
 #include "iv.h"
 
 // lowerpartition.h contains different cutting algorithms, 99% we don't need this
+// There are defs in there that we use...
 #include "lowerpartition.h"
 
 struct PCompare : public binary_function<frag_ptr, frag_ptr, bool>
@@ -79,6 +80,38 @@ template<typename T>
 class partitions {
 
 private:
+
+    int fID;
+    
+    heap myheap;
+    
+    // md5 vars
+    static const unsigned W_SET = 4;
+    md5_state_t state;
+    md5_byte_t digest[16];
+    hStruct* h[W_SET];
+
+    FILE* ffrag; // the file to write meta inforation
+    FILE* fbase_frag;
+
+    
+    unsigned*          maxid; 
+    unsigned*          currid;          // current ID of ...
+    int*               bound_buf;       // the partition boundary buffer
+    unsigned*          md5_buf;         // 
+    
+    finfo*             fragments;       // an array of finfo
+    int                fragments_count; // size of fragments
+
+    finfo*             fragments2;      // an array of finfo
+    frag_ptr*          fbuf;            // an array of frag_ptr
+
+    // unsigned char**    refer_ptrs2;     // versions (so each inner array is like wordIDs for one version)
+    unsigned*          selected_buf;    //
+    // unsigned char*     tpbuf;           // 
+
+    // int total_level; // TODO where is this initialized?
+
     int load_global() {
         FILE* f = fopen("maxid", "rb");
         int size;
@@ -96,41 +129,10 @@ private:
 
     }
 
-    int ptr; // size of fragments???
-    int fID;
-    heap myheap;
-    static const unsigned W_SET = 4;
-    md5_state_t state;
-    md5_byte_t digest[16];
-    FILE* ffrag; // the file to write meta inforation
-    FILE* fbase_frag;
-
-    // T docCutter;
-
-    /**************************
-     * buffer used in the class
-     * ***********************/
-    hStruct *          h[W_SET];
-    unsigned*          maxid; 
-    unsigned*          currid;          // current ID of ...
-    int*               bound_buf;       // the partition boundary buffer
-    unsigned*          md5_buf;         // 
-    finfo*             fragments;       // an array of finfo
-    finfo*             fragments2;      // an array of finfo
-    frag_ptr*          fbuf;            // an array of frag_ptr
-    int**              refer_ptrs;      // versions (so each inner array is like wordIDs for one version)
-    unsigned char**    refer_ptrs2;     // versions (so each inner array is like wordIDs for one version)
-    unsigned*          id_trans;        // 
-    unsigned*          selected_buf;    //
-    unsigned char*     tpbuf;           // 
-
-    // int total_level; // TODO where is this initialized?
-
-
 public:
 
     posting* add_list;
-    unsigned* block_info;
+    // unsigned* block_info;
     block* block_info2;
     int block_info_ptr;
     int add_list_len;
@@ -141,12 +143,12 @@ public:
 
     int dump_frag()
     {
-        for (int i = 0; i< ptr; i++)
+        for (int i = 0; i < fragments_count; i++)
         {
             fragments[i].size = 0;
             fragments[i].items.clear();
         }
-        ptr = 0;
+        fragments_count = 0;
         return 0;
     }
 
@@ -157,7 +159,7 @@ public:
         add_list_len = 0;
         flens_count = 0;
         block_info_ptr = 0;
-        ptr = 0;
+        fragments_count = 0;
         fID = 0;
 
         if (h[0] != NULL)
@@ -190,8 +192,10 @@ public:
     {
         selected_buf = new unsigned[MAXDIS];
         fbuf = new frag_ptr[5000000];
-        refer_ptrs = new int*[20000];
-        refer_ptrs2 = new unsigned char*[20000];
+        
+        // refer_ptrs = new int*[20000];
+        // refer_ptrs2 = new unsigned char*[20000];
+        
         vbuf = new unsigned char[50000000];
         bound_buf = new int[5000000];
         md5_buf = new unsigned[5000000];
@@ -199,9 +203,10 @@ public:
         fragments = new finfo[5000000];
         fragments2 = new finfo[5000000];
         flens = new unsigned[5000000];
-        block_info = new unsigned[5000000];
+        
+        // block_info = new unsigned[5000000];
+        
         block_info2 = new block[5000000];
-        id_trans = new unsigned[60*20000];
         fID = 0;
         base_frag = 0;
         char fn[256];
@@ -224,19 +229,25 @@ public:
         fclose(fbase_frag);
     }
 
+    /*
+    
+        Scores the fragments and adds them to a heap
+        The heap entries have score and ptr (I think he means indexInHeap)
+
+    */
     void completeCount(double wsize)
     {
         myheap.init();
-        for (int i = 0; i < ptr; i++)
+        for (int i = 0; i < fragments_count; i++)
         {
             fragments[i].size = fragments[i].items.size();
         }
 
-        for (int i = 0; i < ptr; i++)
+        for (int i = 0; i < fragments_count; i++)
         {
-            for (vector<p>::iterator its = fragments[i].items.begin(); its != fragments[i].items.end(); its++)
+            for (vector<p>::iterator it = fragments[i].items.begin(); it != fragments[i].items.end(); it++)
             {
-                its->isVoid = false;
+                it->isVoid = false;
             }
 
             fragments[i].score = static_cast<double>(fragments[i].len * fragments[i].size) / (1 + fragments[i].len + wsize * (1 + fragments[i].size)); 
@@ -272,6 +283,11 @@ public:
         return ptr1 + 1;
     }
 
+    /*
+
+        Using the heap of fragments, select the best ones and add them to selected_buf
+
+    */
     int select_ptr;
     void select(iv* currentInvertedList, double wsize)
     {
@@ -281,14 +297,18 @@ public:
             hpost po = myheap.top();
             selected_buf[select_ptr++] = po.ptr;
             myheap.pop();
+
+            // TODO what is this?
             int idx = po.ptr;
             int cptr = 0;
-            for (vector<p>::iterator its = fragments[idx].items.begin(); its != fragments[idx].items.end(); its++)
+            for (vector<p>::iterator it = fragments[idx].items.begin(); it != fragments[idx].items.end(); it++)
             {
-                if ( its->isVoid == false)
+                if (it->isVoid == false)
                 {
-                    fragments2[idx].items.push_back(*its);
-                    int len = currentInvertedList[its->vid].find_conflict(its->nptr, fragments[idx].items, po.ptr, &fbuf[cptr]);
+                    fragments2[idx].items.push_back(*it);
+
+                    // 
+                    int len = currentInvertedList[it->vid].find_conflict(it->nptr, fragments[idx].items, po.ptr, &fbuf[cptr]);
                     cptr += len;
                 }
             }
@@ -297,7 +317,7 @@ public:
 
             if (cptr > 0)
             {
-                sort(fbuf, fbuf+cptr, comparep);
+                sort(fbuf, fbuf + cptr, comparep);
                 cptr = compact(fbuf, cptr);
                 for (int i = 0; i < cptr; i++)
                 {
@@ -401,55 +421,71 @@ public:
         fwrite(vbuf, sizeof(unsigned char), vbuf_ptr - vbuf, ffrag);
 
         // clear the vector<p> in each fragment
-        for (int i = 0; i < ptr; i++)
+        for (int i = 0; i < fragments_count; i++)
         {
             fragments[i].size = 0;
             fragments[i].items.clear();
         }
     }
 
+    /*
+
+        I think this function populates binfo* bis
+        Check diff2_repair for the definition of binfo
+
+    */
     void PushBlockInfo(vector<vector<unsigned> >& versions, int id, binfo* bis)
     {
-        if (tpbuf == NULL) {
-            tpbuf = new unsigned char[MAXSIZE];
-        }
+        /*
+        
+        I am very unsure of commenting out this bullshit
 
-        int start = 0;
-        for (int i = 0; i < versions.size(); i++)
-        {
-            refer_ptrs2[i] = &tpbuf[start];
-            start += versionSizes[i];
-        }
-        memset(tpbuf, 0, start);
+        */
+
+        // if (tpbuf == NULL) {
+        //     tpbuf = new unsigned char[MAXSIZE];
+        // }
+
+        // int start = 0;
+        // for (int i = 0; i < versions.size(); i++)
+        // {
+        //     // We're populating versions
+        //     versions[i] = &tpbuf[start];
+        //     start += versionSizes[i];
+        // }
+        // memset(tpbuf, 0, start);
 
         add_list_len = 0;
         int new_fid = 0;
         int total = 0;
         bis->total_dis = select_ptr;
         int total_post = 0;
+
+        // Each iteration of this loop processing one fragment
         for (int i = 0; i < select_ptr; i++)
         {
             int myidx = selected_buf[i];
             total += fragments2[myidx].items.size();
             total_post += fragments2[myidx].len;
 
-            for (vector<p>::iterator its = fragments2[myidx].items.begin(); its != fragments2[myidx].items.end(); its++)
+            // Each iteration of this loop processes a fragment application
+            for (vector<p>::iterator it = fragments2[myidx].items.begin(); it != fragments2[myidx].items.end(); it++)
             {
-                int version = its->vid;
-                int off = its->offset;
+                int version = it->vid;
+                int off = it->offset;
                 int len = fragments2[myidx].len;
-                if (!its->isVoid)
+                if (!it->isVoid)
                 {
-                    for (int j = off; j < off+len; j++)
+                    for (int j = off; j < off + len; j++)
                     {
-                        if (refer_ptrs2[version][j] > 0)
+                        if (versions[version][j] > 0)
                         {
                             FILE* ferror = fopen("ERROR", "w");
                             fprintf(ferror, "we got problems!%d, %d, %d\n", id, i, j); // thanks, "we got problems" really helps -YK
                             fclose(ferror);
                             exit(0);
                         }
-                        refer_ptrs2[version][j] = 1;
+                        versions[version][j] = 1;
                     }
                 }
             }
@@ -461,8 +497,10 @@ public:
 
         for (int i = 0; i < versions.size(); i++)
         {
-            for (int j = 0; j < versionSizes[i]; j++){
-                if (refer_ptrs2[i][j] < 0) {
+            for (int j = 0; j < versions[i].size(); j++)
+            {
+                if (versions[i][j] < 0)
+                {
                     FILE* ferror = fopen("ERRORS", "w");
                     fprintf(ferror, "at doc:%d, version:%d\tpos:%d\n", id, i, j);
                     fclose(ferror);
@@ -630,35 +668,35 @@ public:
                         p1.offset = block_info2[j].start;
                         p1.isVoid = false;
 
-                        insertHash(lh, hh, ptr, h[0]);
-                        fragments[ptr].fid = fID;
-                        fragments[ptr].size = 0;
+                        insertHash(lh, hh, fragments_count, h[0]);
+                        fragments[fragments_count].fid = fID;
+                        fragments[fragments_count].size = 0;
 
                         frag_ptr fptr;
-                        fptr.ptr = ptr;
-                        fptr.off = fragments[ptr].size;
+                        fptr.ptr = fragments_count;
+                        fptr.off = fragments[fragments_count].size;
 
                         p1.nptr = currentInvertedList->insert(fptr, block_info2[j].start, ep);
 
                         // what is nptr?
                         if (p1.nptr != -1)
                         {
-                            fragments[ptr].len = block_info2[j].end - block_info2[j].start;
-                            if (fragments[ptr].len < 0)
+                            fragments[fragments_count].len = block_info2[j].end - block_info2[j].start;
+                            if (fragments[fragments_count].len < 0)
                             {
                                 printf("we have an error!%d\tprev bound:%d\tnow bound:%d\t%d\n", block_num, bound_buf[j], bound_buf[j+1], j);
                                 return -1;
                             }
                             // fragments looks like an inverted list
-                            fragments[ptr].items.push_back(p1);
-                            fragments[ptr].size++;
+                            fragments[fragments_count].items.push_back(p1);
+                            fragments[fragments_count].size++;
                             
 
                             // Move to the next list?
-                            ptr++;
-                            if (ptr >= MAXDIS)
+                            fragments_count++;
+                            if (fragments_count >= MAXDIS)
                             {
-                                // This error message sucks. ptr looks like the number of inverted lists
+                                // This error message sucks. fragments_count looks like the number of inverted lists
                                 printf("Too many fragments!\n");
                                 exit(0);
                             }

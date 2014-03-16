@@ -15,7 +15,7 @@ typedef struct
 {
 	int ptr;
 	double score;
-}hpost;
+} hpost;
 
 class heap
 {

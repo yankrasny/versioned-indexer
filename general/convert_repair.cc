@@ -4,10 +4,11 @@
 
 typedef struct
 {
-    int total, total_dis;
+    int total;
+    int total_dis;
     int post;
     float wsize;
-}linfo;
+} linfo;
 
 int comparep(const void* a1, const void* a2)
 {
@@ -17,7 +18,7 @@ int comparep(const void* a1, const void* a2)
     int ret =  l1->post - l2->post;
     int ret2 = l1->total - l2->total;
 
-    if ( ret2 == 0)
+    if (ret2 == 0)
         return ret;
     else
         return ret2;
@@ -25,7 +26,7 @@ int comparep(const void* a1, const void* a2)
 
 int main(int argc, char** argv)
 {
-    linfo* lbuf = new linfo[240179];
+    linfo* lbuf = new linfo[240179]; // haha wow good job bro, magic #s -YK
     int ptr = 0;
     unsigned* lens = new unsigned[240179];
     memset(lens, 0,240179*sizeof(unsigned));
@@ -107,7 +108,7 @@ int main(int argc, char** argv)
 
     fclose(fexcept);
     size = atoi(argv[1]);
-    FILE* fsize =fopen("linfos", "wb");
+    FILE* fsize = fopen("linfos", "wb");
     fwrite(&size,  sizeof(unsigned), 1, fsize);
     fwrite(lens, sizeof(unsigned), size , fsize);
     fclose(fsize);

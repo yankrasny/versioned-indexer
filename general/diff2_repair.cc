@@ -17,12 +17,13 @@
 // I believe this is the maximum size of a document in the whole data set -YK
 #define MAXSIZE 81985059
 
+// Are you kidding me? The hell is total_dis?
 struct binfo
 {
-    int total;
-    int total_dis;
-    int post;
-    float wsize;
+    int total; // number of fragments?
+    int total_dis; // no idea...
+    int post; // total number of postings?
+    float wsize; // the window size (a param used in Jinru's experiments)
 };
 
 struct CompareFunctor

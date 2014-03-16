@@ -17,7 +17,7 @@ struct binfo
     int total, total_dis, post;
 };
 
-#include "general_partition.h"
+#include "general_partition_repair.h"
 #include "../util/indexer.h"
 
 
