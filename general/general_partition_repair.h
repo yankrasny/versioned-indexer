@@ -101,7 +101,7 @@ private:
     
     unsigned* maxid; // TODO
     unsigned* currid; // TODO current ID of what? is this an array?
-    int* bound_buf; // the partition boundary buffer
+    // int* bound_buf; // the partition boundary buffer
     unsigned* md5_buf; // TODO
     
     FragmentInfo* fragments; // an array of FragmentInfo, I think this is the general fragment pool
@@ -151,7 +151,7 @@ public:
         fbuf = new frag_ptr[5000000];
         
         vbuf = new unsigned char[50000000];
-        bound_buf = new int[5000000];
+        // bound_buf = new int[5000000];
         md5_buf = new unsigned[5000000];
         add_list = new posting[1000000];
         fragments = new FragmentInfo[5000000];
@@ -531,10 +531,10 @@ public:
                 exit(1);
             }
             // TODO remove this senseless duplication
-            for (int j = 0; j < numFragsInVersion; ++j)
-            {
-                this->bound_buf[totalNumFrags + j] = (int) offsetsAllVersions[totalNumFrags + j];
-            }
+            // for (int j = 0; j < numFragsInVersion; ++j)
+            // {
+            //     this->bound_buf[totalNumFrags + j] = (int) offsetsAllVersions[totalNumFrags + j];
+            // }
             totalNumFrags += numFragsInVersion;
         }
     }
@@ -597,7 +597,6 @@ public:
             // TODO optional: init offsetsAllVersions to 0
         }
 
-        // Sets this->bound_buf and versionPartitionSizes
         this->cutAllVersions(versions,
             offsetsAllVersions, versionPartitionSizes,
             fragmentationCoefficient, minFragSize, method);
@@ -617,14 +616,14 @@ public:
             for (int j = 0; j < numFragsInVersion - 1; j++)
             {
                 // set blocks (aka fragments) based on the offsets from cut algorithm
-                int currOffset = bound_buf[totalCountFragments + j];
-                int nextOffset = bound_buf[totalCountFragments + j + 1];
+                int currOffset = (int)offsetsAllVersions[totalCountFragments + j];
+                int nextOffset = (int)offsetsAllVersions[totalCountFragments + j + 1];
                 baseFragments[j].start = currOffset;
                 baseFragments[j].end = nextOffset;
             }
 
             // Last fragment ends with the version size TODO check this using gdb
-            baseFragments[numFragsInVersion - 1].start = bound_buf[numFragsInVersion - 1];
+            baseFragments[numFragsInVersion - 1].start = offsetsAllVersions[numFragsInVersion - 1];
             baseFragments[numFragsInVersion - 1].end = versionSizes[v]; // length of the version in words
 
             /*
@@ -635,11 +634,12 @@ public:
             int counts = 0;
             while (counts < 1) // counts < total_level
             {
-                for (int j = 0; j < numFragsInVersion; j++)
+                // TODO check these bounds for j
+                for (int j = totalCountFragments; j < totalCountFragments + numFragsInVersion; j++)
                 {
                     for (int l = baseFragments[j].start; l < baseFragments[j].end; l++)
                     {
-                        md5_buf[l - bound_buf[j]] = versions[v][l];
+                        md5_buf[l - offsetsAllVersions[j]] = versions[v][l];
                     }
 
                     ep = baseFragments[j].end;
@@ -675,7 +675,7 @@ public:
                             fragments[fragments_count].len = baseFragments[j].end - baseFragments[j].start;
                             if (fragments[fragments_count].len < 0)
                             {
-                                printf("Error... block number: %d, prev bound: %d, current bound: %d\n", j, bound_buf[j], bound_buf[j + 1]);
+                                printf("Error... block number: %d, prev bound: %d, current bound: %d\n", j, offsetsAllVersions[j], offsetsAllVersions[j + 1]);
                                 return -1;
                             }
                             fragments[fragments_count].applications.push_back(p1);
