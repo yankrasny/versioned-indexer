@@ -43,12 +43,11 @@ struct FragmentInfo
     // the fragment id
     int fid;
 
-    // i think this is the length in word ids. Nope, now I think it's number of postings
-    // now I think it's the length of the fragment in words
-    int len; 
+    // length of the fragment in words
+    int length; 
     
     // i think this is the number of applications, but why do you need that if we can get it from the vector?
-    int size;
+    int numApplications;
 
     double score;
     vector<FragmentApplication> applications;
@@ -151,7 +150,6 @@ public:
         fbuf = new frag_ptr[5000000];
         
         vbuf = new unsigned char[50000000];
-        // bound_buf = new int[5000000];
         md5_buf = new unsigned[5000000];
         add_list = new posting[1000000];
         fragments = new FragmentInfo[5000000];
@@ -188,7 +186,7 @@ public:
     {
         for (int i = 0; i < fragments_count; i++)
         {
-            fragments[i].size = 0;
+            fragments[i].numApplications = 0;
             fragments[i].applications.clear();
         }
         fragments_count = 0;
@@ -239,7 +237,7 @@ public:
         myheap.init();
         for (int i = 0; i < fragments_count; i++)
         {
-            fragments[i].size = fragments[i].applications.size();
+            fragments[i].numApplications = fragments[i].applications.size();
         }
 
         for (int i = 0; i < fragments_count; i++)
@@ -250,7 +248,7 @@ public:
             }
 
             // TODO replace wsize with one of your params
-            fragments[i].score = static_cast<double>(fragments[i].len * fragments[i].size) / (1 + fragments[i].len + wsize * (1 + fragments[i].size)); 
+            fragments[i].score = static_cast<double>(fragments[i].length * fragments[i].numApplications) / (1 + fragments[i].length + wsize * (1 + fragments[i].numApplications)); 
             hpost heapEntry;
             heapEntry.ptr = i;
             heapEntry.score = fragments[i].score;
@@ -312,8 +310,8 @@ public:
                     cptr += len;
                 }
             }
-            fragments2[idx].size = fragments2[idx].applications.size();
-            fragments2[idx].len = fragments[idx].len;
+            fragments2[idx].numApplications = fragments2[idx].applications.size();
+            fragments2[idx].length = fragments[idx].length;
 
             /*
                 It looks like we're handling fragment conflicts here
@@ -329,25 +327,25 @@ public:
                     if (i > 0 && fbuf[i].ptr != fbuf[i-1].ptr)
                     {
                         int idx2 = fbuf[i-1].ptr;
-                        if (fragments[idx2].size > 0)
+                        if (fragments[idx2].numApplications > 0)
                         {
-                            fragments[idx2].score = fragments[idx2].len * fragments[idx2].size / (1 + fragments[idx2].len + wsize * (1 + fragments[idx2].size));
+                            fragments[idx2].score = fragments[idx2].length * fragments[idx2].numApplications / (1 + fragments[idx2].length + wsize * (1 + fragments[idx2].numApplications));
                             myheap.UpdateKey(idx2, fragments[idx2].score);
                         }
                     }
                     if (fragments[idx].applications.at(fbuf[i].off).isVoid == false)
                     {
-                        fragments[idx].size--;
+                        fragments[idx].numApplications--;
                         fragments[idx].applications.at(fbuf[i].off).isVoid = true;
-                        if (fragments[idx].size == 0)
+                        if (fragments[idx].numApplications == 0)
                             myheap.deleteKey(idx);
                     }
                 }
 
                 idx = fbuf[cptr - 1].ptr;
-                if (fragments[idx].size > 0)
+                if (fragments[idx].numApplications > 0)
                 {
-                    fragments[idx].score = fragments[idx].len * fragments[idx].size / (1 + fragments[idx].len + wsize * (1 + fragments[idx].size));
+                    fragments[idx].score = fragments[idx].length * fragments[idx].numApplications / (1 + fragments[idx].length + wsize * (1 + fragments[idx].numApplications));
                     myheap.UpdateKey(idx, fragments[idx].score);
                 }
             }
@@ -374,15 +372,15 @@ public:
         add_list_len = 0;
         unsigned char* vbuf_ptr = vbuf;
 
-        // Iterate over selectedFragIndexes (TODO what's selectedFragIndexes?)
+        // Iterate over selectedFragIndexes
         for (int i = 0; i < numSelectedFrags; i++)
         {
             int myidx = selectedFragIndexes[i];
             FragmentApplication currFragApp = fragments2[myidx].applications.at(0);
             int version = currFragApp.vid;
             int off = currFragApp.offset;
-            int len = fragments2[myidx].len;
-            int size = fragments2[myidx].size;
+            int len = fragments2[myidx].length;
+            int size = fragments2[myidx].numApplications;
 
             // Iterate over ... TODO
             for (int j = off; j < off + len; j++)
@@ -429,7 +427,7 @@ public:
         // clear the vector<p> in each fragment
         for (int i = 0; i < fragments_count; i++)
         {
-            fragments[i].size = 0;
+            fragments[i].numApplications = 0;
             fragments[i].applications.clear();
         }
     }
@@ -450,14 +448,14 @@ public:
         {
             int myidx = selectedFragIndexes[i];
             totalNumApplications += fragments2[myidx].applications.size();
-            totalNumPostings += fragments2[myidx].len;
+            totalNumPostings += fragments2[myidx].length;
 
             // Each iteration of this loop processes a fragment application
             for (auto it = fragments2[myidx].applications.begin(); it != fragments2[myidx].applications.end(); it++)
             {
                 int version = it->vid;
                 int off = it->offset;
-                int len = fragments2[myidx].len;
+                int len = fragments2[myidx].length;
                 if (!it->isVoid)
                 {
                     for (int j = off; j < off + len; j++)
@@ -521,9 +519,9 @@ public:
         unsigned totalNumFrags(0);
         for (int i = 0; i < versions.size(); ++i)
         {
-            // cerr << "Total num frags: " << totalNumFrags << endl;
             unsigned numFragsInVersion = versionPartitionSizes[i];
-            if (numFragsInVersion > MAX_NUM_FRAGMENTS_PER_VERSION) {
+            if (numFragsInVersion > MAX_NUM_FRAGMENTS_PER_VERSION)
+            {
                 cerr << "numFragsInVersion " << i << ": " << numFragsInVersion << endl;
                 cerr << "totalNumFrags " << totalNumFrags << endl;
                 exit(1);
@@ -659,25 +657,25 @@ public:
 
                         insertHash(lh, hh, fragments_count, h[0]);
                         fragments[fragments_count].fid = fID;
-                        fragments[fragments_count].size = 0;
+                        fragments[fragments_count].numApplications = 0;
 
                         frag_ptr fptr;
                         fptr.ptr = fragments_count;
-                        fptr.off = fragments[fragments_count].size;
+                        fptr.off = fragments[fragments_count].numApplications;
 
                         p1.nodeId = currentInvertedList->insert(fptr, baseFragments[j].start, ep);
 
                         // what is nodeId?
                         if (p1.nodeId != -1)
                         {
-                            fragments[fragments_count].len = baseFragments[j].end - baseFragments[j].start;
-                            if (fragments[fragments_count].len < 0)
+                            fragments[fragments_count].length = baseFragments[j].end - baseFragments[j].start;
+                            if (fragments[fragments_count].length < 0)
                             {
                                 printf("Error... block number: %d, prev bound: %d, current bound: %d\n", j, offsetsAllVersions[j], offsetsAllVersions[j + 1]);
                                 return -1;
                             }
                             fragments[fragments_count].applications.push_back(p1);
-                            fragments[fragments_count].size++;
+                            fragments[fragments_count].numApplications++;
                             fragments_count++;
                             if (fragments_count >= MAX_NUM_FRAGMENTS)
                             {
@@ -692,7 +690,7 @@ public:
                     {
                         frag_ptr fptr;
                         fptr.ptr = ins;
-                        fptr.off = fragments[ins].size;
+                        fptr.off = fragments[ins].numApplications;
                         
                         FragmentApplication p2;
                         p2.vid = v;
@@ -705,7 +703,7 @@ public:
                         if (p2.nodeId != -1)
                         {
                             fragments[ins].applications.push_back(p2);
-                            fragments[ins].size++;
+                            fragments[ins].numApplications++;
                         }
                     }
                 }
@@ -720,7 +718,6 @@ public:
 
         return totalCountFragments;
     }
-
 
 };
 
