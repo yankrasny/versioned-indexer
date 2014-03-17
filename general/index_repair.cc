@@ -79,8 +79,8 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, float wsize)
     printf("Finished partitioning!\n");
 
     partitionAlgorithm->addFragmentsToHeap(wsize);
-    partitionAlgorithm->select(invertedLists, wsize);
-    partitionAlgorithm->finish3(versions, docId);
+    partitionAlgorithm->selectGoodFragments(invertedLists, wsize);
+    partitionAlgorithm->populatePostings(versions, docId);
 
     for (int i = 0; i < partitionAlgorithm->add_list_len; i++)
     {

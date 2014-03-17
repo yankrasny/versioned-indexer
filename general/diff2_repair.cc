@@ -26,6 +26,7 @@ struct TradeoffRecord
     float wsize; // the window size (a param used in Jinru's experiments)
 };
 
+// TODO this isn't used anywhere, remove if safe to do so
 struct CompareFunctor
 {
     bool operator()(const TradeoffRecord& l1, const TradeoffRecord& l2)
@@ -82,9 +83,8 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
             partitionAlgorithm->addFragmentsToHeap(wsize);
 
             partitionAlgorithm->select(invertedLists, wsize);
-
-            // partitionAlgorithm->PushBlockInfo(documentContent, versionSizes, docId, versions.size(), &tradeoffRecord);
-            partitionAlgorithm->PushBlockInfo(versions, docId, &tradeoffRecord);
+            
+            partitionAlgorithm->writeTradeoffRecord(versions, docId, &tradeoffRecord);
 
             tradeoffRecord.wsize = wsize;
             TradeoffTable.push_back(tradeoffRecord);

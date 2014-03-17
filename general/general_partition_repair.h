@@ -284,12 +284,10 @@ public:
     }
 
     /*
-
         Using the heap of fragments, select the best ones and add them to selectedFragIndexes
-
     */
     int numSelectedFrags;
-    void select(iv* currentInvertedList, double wsize)
+    void selectGoodFragments(iv* currentInvertedList, double wsize)
     {
         numSelectedFrags = 0;
         while (myheap.size() > 0)
@@ -298,12 +296,10 @@ public:
             selectedFragIndexes[numSelectedFrags++] = heapEntry.ptr;
             myheap.pop();
 
-            // TODO what is this?
             /*
-
-                for one fragment, iterate over its applications (fragment applications?)
-                if the application is valid, then add it to fragments2
-
+                TODO finish explanation
+                iterate over the current fragment's applications
+                if the application is valid, then add it to fragments2?
             */
             int idx = heapEntry.ptr;
             int cptr = 0;
@@ -319,6 +315,10 @@ public:
             fragments2[idx].size = fragments2[idx].applications.size();
             fragments2[idx].len = fragments[idx].len;
 
+            /*
+                It looks like we're handling fragment conflicts here
+                If there are some conflicts, then go through them and update scores and other vars for the fragments involved
+            */
             if (cptr > 0)
             {
                 sort(fbuf, fbuf + cptr, comparep);
@@ -356,8 +356,7 @@ public:
 
     /*
 
-        Add a description
-        Ask questions, and eventually you'll get it
+        TODO finish description
 
         Description:
             Essentially the point here is to populate add_list with postings
@@ -370,7 +369,7 @@ public:
                 Is it anything to do with overlapping fragments?
 
     */
-    void finish3(vector<vector<unsigned> >& versions, int docId)
+    void populatePostings(vector<vector<unsigned> >& versions, int docId)
     {
         add_list_len = 0;
         unsigned char* vbuf_ptr = vbuf;
@@ -436,13 +435,11 @@ public:
     }
 
     /*
-
-        I think this function populates TradeoffRecord* bis
+        I think this function populates one TradeoffRecord
         This function populates the Tradeoff Table (between meta data size and index size)
         Check diff2_repair for the definition of TradeoffRecord
-
     */
-    void PushBlockInfo(vector<vector<unsigned> >& versions, int docId, TradeoffRecord* tradeoffRecord)
+    void writeTradeoffRecord(vector<vector<unsigned> >& versions, int docId, TradeoffRecord* tradeoffRecord)
     {
         add_list_len = 0;
         int totalNumApplications = 0;
@@ -483,6 +480,7 @@ public:
         tradeoffRecord->numFragApplications = totalNumApplications;
         tradeoffRecord->numPostings = totalNumPostings;
 
+        // The following is debug code, doesn't affect the output
         for (int i = 0; i < versions.size(); i++)
         {
             for (int j = 0; j < versions[i].size(); j++)
@@ -490,7 +488,7 @@ public:
                 if (versions[i][j] < 0)
                 {
                     FILE* ferror = fopen("ERRORS", "w");
-                    fprintf(ferror, "at doc:%d, version:%d\tpos:%d\n", docId, i, j);
+                    fprintf(ferror, "Error at doc: %d, version: %d, position: %d\n", docId, i, j);
                     fclose(ferror);
                     cerr << "See file ERRORS" << endl;
                     exit(0);
