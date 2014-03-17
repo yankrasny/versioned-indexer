@@ -106,7 +106,8 @@ public:
 	{
 		int i;
 		int id;
-		for ( i = ++Size; Elements[i/2].score < p.score; i/=2){
+		for (i = ++Size; Elements[i/2].score < p.score; i/=2)
+		{
 			int idx = Elements[i/2].ptr;
 			key_pos[idx] = i;
 			Elements[i] = Elements[i/2];
@@ -133,7 +134,7 @@ public:
 
 			if ( Child != Size && Elements[Child].score < Elements[Child+1].score)
 				Child++;
-			if ( Elements[Child].score > LastElement.score){
+			if ( Elements[Child].score > LastElement.score) {
 				Elements[ i ] = Elements[ Child ];
 				id = Elements[i].ptr;
 				key_pos[id] = i;

@@ -8,6 +8,8 @@
 #include "vb.h"
 #include "readwritebits.h"
 
+#define MAX_NUM_NODES 1000000;
+
 using namespace std;
 struct frag_ptr
 {
@@ -51,8 +53,8 @@ public:
     {
         nID = 0;
 
-        nbuf = new node[1000000];
-        sort_nbuf = new node[1000000];
+        nbuf = new node[MAX_NUM_NODES];
+        sort_nbuf = new node[MAX_NUM_NODES];
         inlist = NULL;
     }
 
@@ -90,16 +92,17 @@ public:
 
     int loadiv(unsigned char* buf)
     {
-        unsigned char* buf_ptr =buf;
+        unsigned char* buf_ptr = buf;
         int id;
         VBYTE_DECODE(buf_ptr, id);
         nID = id;
         inlist = new list<int>[id];
         nbuf = new node[id];
-        for (int i = 0; i < id;i++) {
+        for (int i = 0; i < id; ++i)
+        {
             int size;
             VBYTE_DECODE(buf_ptr, size);
-            for ( int j = 0; j < size; j++)
+            for (int j = 0; j < size; ++j)
             {
                 int k;
                 VBYTE_DECODE(buf_ptr, k);
@@ -111,18 +114,18 @@ public:
     /* 
      * insert a fragment information to the inverted list structure
      */
-    int insert(const frag_ptr& finfo, int start, int end)
+    int insert(const frag_ptr& fptr, int start, int end)
     {
-        end--;
-        nbuf[nID].fptr = finfo;
+        --end;
+        nbuf[nID].fptr = fptr;
         nbuf[nID].start = start;
         nbuf[nID].end = end;
         nbuf[nID].nid = nID;
         sort_nbuf[nID] = nbuf[nID];
-        nID++;
-        if (nID > 1000000)
+        ++nID;
+        if (nID > MAX_NUM_NODES)
         {
-            printf("Out of memory!\n");
+            printf("Too many nodes in class iv...\n");
             exit(0);
         }
         return nbuf[nID - 1].nid;
@@ -130,7 +133,7 @@ public:
 
     bool intersect(const node& n1, const node& n2)
     {
-        if ( n1.start > n2.end || n1.end < n2.start)
+        if (n1.start > n2.end || n1.end < n2.start)
             return false;
         else
             return true;
@@ -139,11 +142,12 @@ public:
     int complete()
     {
         inlist = new list<int>[nID];
-        for ( int i = 0; i < nID; i++)
+        for (int i = 0; i < nID; ++i)
         {
-            for ( int j = i+1; j < nID; j++)
+            for (int j = i + 1; j < nID; ++j)
             {
-                if ( intersect(sort_nbuf[i], sort_nbuf[j])){
+                if (intersect(sort_nbuf[i], sort_nbuf[j]))
+                {
                     int idx = sort_nbuf[i].nid;
                     int idx2 = sort_nbuf[j].nid;
                     inlist[idx].push_back(idx2);
@@ -160,17 +164,19 @@ public:
         int size = inlist[nID].size();
         list<int>::iterator its;
         int ptr = 0;
-        for ( its = inlist[nID].begin(); its!=inlist[nID].end(); its++)
+        for (its = inlist[nID].begin(); its!=inlist[nID].end(); its++)
         {
             frag_ptr& fm = nbuf[*its].fptr;
             fbuf[ptr].ptr = fm.ptr;
             fbuf[ptr].off = fm.off;
-            if ( idx == fm.ptr)
+            if (idx == fm.ptr)
             {
                 li.at(fm.off).isVoid = true;
             }
             else
+            {
                 ptr++;
+            }
         }
         return ptr;
     }

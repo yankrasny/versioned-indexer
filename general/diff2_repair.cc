@@ -17,26 +17,26 @@
 // I believe this is the maximum size of a document in the whole data set -YK
 #define MAXSIZE 81985059
 
-// Are you kidding me? The hell is total_dis?
-struct binfo
+// This is a row in the tradeoff table (metadata vs index size)
+struct TradeoffRecord
 {
-    int total; // number of fragments?
-    int total_dis; // no idea...
-    int post; // total number of postings?
+    int numFragApplications; // number of fragment applications
+    int numDistinctFrags; // number of distinct fragments
+    int numPostings; // total number of postings
     float wsize; // the window size (a param used in Jinru's experiments)
 };
 
 struct CompareFunctor
 {
-    bool operator()(const binfo& l1, const binfo& l2)
+    bool operator()(const TradeoffRecord& l1, const TradeoffRecord& l2)
     {
-        if (l1.total == l2.total)
+        if (l1.numFragApplications == l2.numFragApplications)
         {
-            return l1.post < l2.post;
+            return l1.numPostings < l2.numPostings;
         }
         else
         {
-            return l1.total < l2.total;
+            return l1.numFragApplications < l2.numFragApplications;
         }
     }
 } compareb;
@@ -68,8 +68,8 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
 
         // TODO rewrite selection based on your params, not wsizes (window sizes for minnowing alg)
         // build table for each document recording total number of block and total postings
-        vector<binfo> lbuf;
-        binfo binf;
+        vector<TradeoffRecord> TradeoffTable;
+        TradeoffRecord tradeoffRecord;
         memset(fn, 0, 256);
         sprintf(fn, "test/%d.2", docId);
         f = fopen(fn, "w");
@@ -79,16 +79,16 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
         {
             double wsize = wsizes2[i];
 
-            partitionAlgorithm->completeCount(wsize);
+            partitionAlgorithm->addFragmentsToHeap(wsize);
 
             partitionAlgorithm->select(invertedLists, wsize);
 
-            // partitionAlgorithm->PushBlockInfo(documentContent, versionSizes, docId, versions.size(), &binf);
-            partitionAlgorithm->PushBlockInfo(versions, docId, &binf);
+            // partitionAlgorithm->PushBlockInfo(documentContent, versionSizes, docId, versions.size(), &tradeoffRecord);
+            partitionAlgorithm->PushBlockInfo(versions, docId, &tradeoffRecord);
 
-            binf.wsize = wsize;
-            lbuf.push_back(binf);
-            fprintf(f, "%.2lf\t%d\t%d\t%d\n", wsize, binf.total_dis, binf.total, binf.post);
+            tradeoffRecord.wsize = wsize;
+            TradeoffTable.push_back(tradeoffRecord);
+            fprintf(f, "%.2lf\t%d\t%d\t%d\n", wsize, tradeoffRecord.numDistinctFrags, tradeoffRecord.numFragApplications, tradeoffRecord.numPostings);
         }
         fclose(f);
 

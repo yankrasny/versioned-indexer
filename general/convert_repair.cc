@@ -5,8 +5,8 @@
 typedef struct
 {
     int total;
-    int total_dis;
-    int post;
+    int numDistinctFrags;
+    int numPostings;
     float wsize;
 } linfo;
 
@@ -15,7 +15,7 @@ int comparep(const void* a1, const void* a2)
     linfo* l1 = (linfo*)a1;
     linfo* l2 = (linfo*)a2;
 
-    int ret =  l1->post - l2->post;
+    int ret =  l1->numPostings - l2->numPostings;
     int ret2 = l1->total - l2->total;
 
     if (ret2 == 0)
@@ -49,17 +49,22 @@ int main(int argc, char** argv)
     int wsize = 0;
     FILE* fexcept = fopen("except", "w");
 
-    for ( int i = 0; i < atoi(argv[1]); i++){
+    for (int i = 0; i < atoi(argv[1]); i++)
+    {
         memset(fn, 0, 256);
         sprintf(fn, "test/%d.2", i);
         FILE* f1 = fopen(fn, "r");
         ptr = 0;
         printf("processing:%d...", i);
-        if ( lens2[i] > 1 ){
+        if (lens2[i] > 1)
+        {
             bool change = false; 
-            while ( fscanf(f1, "%f\t%d\t%d\t%d\n", &lbuf[ptr].wsize, &lbuf[ptr].total_dis,  &lbuf[ptr].total, &lbuf[ptr].post)>0){
-                if ( ptr > 0 && lbuf[ptr].post != lbuf[ptr-1].post)
+            while (fscanf(f1, "%f\t%d\t%d\t%d\n", &lbuf[ptr].wsize, &lbuf[ptr].numDistinctFrags,  &lbuf[ptr].total, &lbuf[ptr].numPostings)>0)
+            {
+                if (ptr > 0 && lbuf[ptr].numPostings != lbuf[ptr-1].numPostings)
+                {
                     change = true;
+                }
                 ptr++;
             }
             fclose(f1);
@@ -71,10 +76,10 @@ int main(int argc, char** argv)
             int ptr2 = 1;
             while (ptr2 < ptr)
             {
-                while ( ptr2 < ptr && lbuf[ptr2].post >= lbuf[ptr1].post)
+                while (ptr2 < ptr && lbuf[ptr2].numPostings >= lbuf[ptr1].numPostings)
                     ptr2++;
 
-                if ( ptr2 >= ptr)
+                if (ptr2 >= ptr)
                     break;
 
                 ptr1++;
@@ -82,12 +87,16 @@ int main(int argc, char** argv)
                 ptr2++;
             }
             ptr1++;
-            for ( int j = 0; j < ptr1; j++)
-                fprintf(f1, "%.1f\t%d\t%d\t%d\n", lbuf[j].wsize, lbuf[j].total,lbuf[j].total_dis, lbuf[j].post);
+            
+            for (int j = 0; j < ptr1; j++)
+            {
+                fprintf(f1, "%.1f\t%d\t%d\t%d\n", lbuf[j].wsize, lbuf[j].total, lbuf[j].numDistinctFrags, lbuf[j].numPostings);
+            }
+            
             fclose(f1);
             fwrite(lbuf, sizeof(linfo), ptr1, f2);
             lens[i] = ptr1;
-            if ( change == false)
+            if (change == false)
             {
                 fprintf(fexcept, "%d\t%d\n", i, ptr);
             }
@@ -98,8 +107,8 @@ int main(int argc, char** argv)
             lens[i] = 1;
             lbuf[0].wsize = dlens[wsize];
             lbuf[0].total = 1;
-            lbuf[0].total_dis  = 1;
-            lbuf[0].post = dlens[wsize];
+            lbuf[0].numDistinctFrags  = 1;
+            lbuf[0].numPostings = dlens[wsize];
             fwrite(lbuf, sizeof(linfo), 1, f2);
         }
         wsize += lens2[i];

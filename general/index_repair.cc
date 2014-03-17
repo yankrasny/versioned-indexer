@@ -11,10 +11,10 @@
 #include <fstream>
 
 //#define MAXSIZE 250939073
-#define	MAXSIZE 81985059 			/*  */
+#define	MAXSIZE 81985059
 struct binfo
 {
-    int total, total_dis, post;
+    int numFragApplications, numDistinctFrags, numPostings;
 };
 
 #include "general_partition_repair.h"
@@ -78,7 +78,7 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, float wsize)
     
     printf("Finished partitioning!\n");
 
-    partitionAlgorithm->completeCount(wsize);
+    partitionAlgorithm->addFragmentsToHeap(wsize);
     partitionAlgorithm->select(invertedLists, wsize);
     partitionAlgorithm->finish3(versions, docId);
 
@@ -152,7 +152,7 @@ int main(int argc, char**argv)
         // }
 
         int totalCount = dothejob(buf, &wcounts[ptr], i, numv[i], result_buf[i]);
-        fout << result_buf[i]<<'\t'<<totalCount<<endl;
+        fout << result_buf[i] << '\t' << totalCount << endl;
         printf("Complete:%d\n", i);
         ptr += numv[i];
         
