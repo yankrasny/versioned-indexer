@@ -82,7 +82,7 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
 
             partitionAlgorithm->addFragmentsToHeap(wsize);
 
-            partitionAlgorithm->select(invertedLists, wsize);
+            partitionAlgorithm->selectGoodFragments(invertedLists, wsize);
             
             partitionAlgorithm->writeTradeoffRecord(versions, docId, &tradeoffRecord);
 

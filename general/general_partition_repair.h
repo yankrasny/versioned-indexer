@@ -142,14 +142,14 @@ public:
     unsigned flens_count;
     unsigned base_frag;
 
-    unsigned char* vbuf;
+    unsigned char* varbyteBuffer;
 
     partitions(int para = 0, int maxblock = 0, int blayer = 0, int pTotal = 0) : myheap(MAX_NUM_FRAGMENTS)
     {
         selectedFragIndexes = new unsigned[MAX_NUM_FRAGMENTS];
         fbuf = new frag_ptr[5000000];
         
-        vbuf = new unsigned char[50000000];
+        varbyteBuffer = new unsigned char[50000000];
         md5_buf = new unsigned[5000000];
         add_list = new posting[1000000];
         fragments = new FragmentInfo[5000000];
@@ -358,7 +358,7 @@ public:
 
         Description:
             Essentially the point here is to populate add_list with postings
-            I think this function has another goal, something to do with vbuf
+            I think this function has another goal, something to do with varbyteBuffer
                 There's an fwrite of that varbyte content, need to understand that better
 
         Notes:
@@ -370,7 +370,7 @@ public:
     void populatePostings(vector<vector<unsigned> >& versions, int docId)
     {
         add_list_len = 0;
-        unsigned char* vbuf_ptr = vbuf;
+        unsigned char* varbyteBufferPtr = varbyteBuffer;
 
         // Iterate over selectedFragIndexes
         for (int i = 0; i < numSelectedFrags; i++)
@@ -397,15 +397,15 @@ public:
                 putting it into a file called frag_%d.info (see the end of this function)
 
             */
-            VBYTE_ENCODE(vbuf_ptr, len);            
-            VBYTE_ENCODE(vbuf_ptr, size);
+            VBYTE_ENCODE(varbyteBufferPtr, len);            
+            VBYTE_ENCODE(varbyteBufferPtr, size);
 
             for (auto it = fragments2[myidx].applications.begin(); it != fragments2[myidx].applications.end(); it++)
             {
                 int a = (*it).vid + currid[docId];
                 int b = (*it).offset;
-                VBYTE_ENCODE(vbuf_ptr, a);
-                VBYTE_ENCODE(vbuf_ptr, b);
+                VBYTE_ENCODE(varbyteBufferPtr, a);
+                VBYTE_ENCODE(varbyteBufferPtr, b);
             }
 
             fragments2[myidx].applications.clear();
@@ -422,7 +422,7 @@ public:
         base_frag += numSelectedFrags;
 
         // ok, now we're writing the varbyte encoded stuff somewhere, might be important
-        fwrite(vbuf, sizeof(unsigned char), vbuf_ptr - vbuf, ffrag);
+        fwrite(varbyteBuffer, sizeof(unsigned char), varbyteBufferPtr - varbyteBuffer, ffrag);
 
         // clear the vector<p> in each fragment
         for (int i = 0; i < fragments_count; i++)
