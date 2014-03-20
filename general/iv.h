@@ -159,12 +159,12 @@ public:
         }
     }
 
-    int find_conflict(int nID, vector<p>& li, int idx, frag_ptr* fbuf)
+    int find_conflict(int nID, vector<FragmentApplication>& li, int idx, frag_ptr* fbuf)
     {
         int size = inlist[nID].size();
         list<int>::iterator its;
         int ptr = 0;
-        for (its = inlist[nID].begin(); its!=inlist[nID].end(); its++)
+        for (its = inlist[nID].begin(); its != inlist[nID].end(); its++)
         {
             frag_ptr& fm = nbuf[*its].fptr;
             fbuf[ptr].ptr = fm.ptr;
