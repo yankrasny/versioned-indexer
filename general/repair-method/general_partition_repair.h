@@ -24,8 +24,9 @@
 // Integration with Repair Partitioning code
 #include "../Repair-Partitioning/prototype/RepairPartitioningPrototype.h"
 
+#define MAX_NUM_BASE_FRAGMENTS 200000
 #define MAX_NUM_FRAGMENTS 20000000
-#define MAX_NUM_WORDS_PER_DOC 200000
+#define MAX_NUM_WORDS_PER_DOC 100000
 
 using namespace std;
 
@@ -56,7 +57,7 @@ struct FragmentInfo
 // Inverted list class
 #include "iv_repair.h"
 
-struct block
+struct BaseFragment
 {
     int start;
     int end;
@@ -100,17 +101,8 @@ private:
     unsigned* maxid; // TODO
     unsigned* currid; // TODO current ID of what? is this an array?
     // int* bound_buf; // the partition boundary buffer
-    unsigned* md5_buf; // TODO
+
     
-    FragmentInfo* fragments; // an array of FragmentInfo, I think this is the general fragment pool
-    int fragments_count; // size of fragments
-
-    FragmentInfo* fragments2; // an array of FragmentInfo, I think this is a subset of fragments (really uncertain about that)
-    frag_ptr* fbuf; // TODO what is a frag_ptr?
-
-    // I think these are the indexes in the heap of good fragments
-    // That makes no sense, why would you store heap indexes?
-    unsigned* selectedFragIndexes; 
 
     // int total_level; // TODO where is this initialized?
 
@@ -133,21 +125,37 @@ private:
 
 public:
 
+
+    vector<BaseFragment> baseFragments;
+
+    // I think these are the indexes in the heap of good fragments
+    // That makes no sense, why would you store heap indexes?
+    unsigned* selectedFragIndexes; 
+    
+    frag_ptr* fbuf; // TODO what is a frag_ptr?
+    unsigned char* varbyteBuffer;
+    unsigned* md5_buf; // TODO
     posting* add_list;
-    block* baseFragments;
+
+    FragmentInfo* fragments; // an array of FragmentInfo, I think this is the general fragment pool
+    int fragments_count; // size of fragments
+
+    FragmentInfo* fragments2; // an array of FragmentInfo, I think this is a subset of fragments (really uncertain about that)
+
+    
     int block_info_ptr;
     int add_list_len;
     unsigned* flens;
     unsigned flens_count;
     unsigned base_frag;
-
-    unsigned char* varbyteBuffer;
+    
 
     GeneralPartitionAlgorithm(int para = 0, int maxblock = 0, int blayer = 0, int pTotal = 0) : myheap(MAX_NUM_FRAGMENTS)
     {
+        baseFragments = vector<BaseFragment>();
+
         selectedFragIndexes = new unsigned[MAX_NUM_FRAGMENTS];
-        fbuf = new frag_ptr[5000000];
-        
+        fbuf = new frag_ptr[5000000];        
         varbyteBuffer = new unsigned char[50000000];
         md5_buf = new unsigned[5000000];
         add_list = new posting[1000000];
@@ -155,9 +163,6 @@ public:
         fragments2 = new FragmentInfo[5000000];
         flens = new unsigned[5000000];
         
-        baseFragments = new block[5000000];
-
-
         fID = 0;
         base_frag = 0;
         char fn[256];
@@ -172,10 +177,14 @@ public:
     ~GeneralPartitionAlgorithm()
     {
         delete [] selectedFragIndexes;
+        delete [] fbuf;
+        delete [] varbyteBuffer;
+        delete [] md5_buf;
+        delete [] add_list;
+        delete [] fragments;
+        delete [] fragments2;
+        delete [] flens;
 
-        // TODO garbage collect all the other buffers
-
-        delete[] fbuf;
         fclose(ffrag);
         fclose(fbase_frag);
     }
@@ -598,44 +607,32 @@ public:
             fragmentationCoefficient, minFragSize, method);
         
         unsigned totalCountFragments(0);
+        unsigned totalCountOffsets(0);
         for (int v = 0; v < versions.size(); ++v)
         {
-            unsigned numFragsInVersion = versionPartitionSizes[v];
-            if (numFragsInVersion == 0)
-            {
-                cerr << "Error: Number of fragments in version " << v << " is 0." << endl;
-                return 0;
-            }
-
+            assert(versionPartitionSizes[v] > 1);
+            unsigned numFragsInVersion = versionPartitionSizes[v] - 1;            
             iv* currentInvertedList = &invertedLists[v];
-
-            for (int j = 0; j < numFragsInVersion - 1; j++)
+            for (int j = 0; j < numFragsInVersion; ++j)
             {
-                // set blocks (aka fragments) based on the offsets from cut algorithm
-                int currOffset = (int)offsetsAllVersions[totalCountFragments + j];
-                int nextOffset = (int)offsetsAllVersions[totalCountFragments + j + 1];
-                baseFragments[j].start = currOffset;
-                baseFragments[j].end = nextOffset;
+                BaseFragment currFrag;
+                currFrag.start = (int)offsetsAllVersions[totalCountOffsets + j];
+                currFrag.end = (int)offsetsAllVersions[totalCountOffsets + j + 1];
+                baseFragments.push_back(currFrag);
             }
 
-            // Last fragment ends with the version size TODO check this using gdb
-            baseFragments[numFragsInVersion - 1].start = offsetsAllVersions[numFragsInVersion - 1];
-            baseFragments[numFragsInVersion - 1].end = versions[v].size(); // length of the version in words
-
-            /*
-                At this point, baseFragments contains the fragments from repair partitioning
-            */
+            /* At this point, baseFragments contains the fragments from repair partitioning */
 
             // Jinru's frag optimization, right? -YK
             int counts = 0;
             while (counts < 1) // counts < total_level
             {
                 // TODO check these bounds for j
-                for (int j = totalCountFragments; j < totalCountFragments + numFragsInVersion; j++)
+                for (int j = 0; j < numFragsInVersion; j++)
                 {
                     for (int l = baseFragments[j].start; l < baseFragments[j].end; l++)
                     {
-                        md5_buf[l - offsetsAllVersions[j]] = versions[v][l];
+                        md5_buf[l - baseFragments[j].start] = versions[v][l];
                     }
 
                     ep = baseFragments[j].end;
@@ -710,6 +707,7 @@ public:
                 counts++;
             }
             totalCountFragments += numFragsInVersion;
+            totalCountOffsets += versionPartitionSizes[v];
             currentInvertedList->complete();
         }
 

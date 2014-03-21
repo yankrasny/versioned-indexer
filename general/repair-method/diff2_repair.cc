@@ -154,13 +154,15 @@ int main(int argc, char**argv)
     // fragmentCounts[i] is the number of fragments in the partitioning doc i
     unsigned* fragmentCounts = new unsigned[docCount];
     auto versions = vector<vector<unsigned> >();
-    unsigned totalWordsInDoc = 0;
-    unsigned totalWordsInVersion = 0;
+    unsigned totalWordsInDoc;
+    unsigned totalWordsInVersion;
     bool skipThisDoc = false;
 
     // In this loop, i is the docId
     for (size_t i = 0; i < docCount; ++i) // for each document -YK
     {
+        totalWordsInDoc = 0;
+        totalWordsInVersion = 0;
         // If you're confused about the line that reads into the vector, see: http://stackoverflow.com/questions/15143670/how-can-i-use-fread-on-a-binary-file-to-read-the-data-into-a-stdvector
         auto currentVersion = vector<unsigned>();
         for (size_t v = 0; v < numVersionsPerDoc[i]; ++v) // for each version in this doc
@@ -174,6 +176,8 @@ int main(int argc, char**argv)
                 // clean up any data you are not using
                 // continue to the next doc properly
                 skipThisDoc = true;
+            } else {
+                skipThisDoc = false;
             }
 
             // Read the contents of the current version into a vector<unsigned>
@@ -187,10 +191,15 @@ int main(int argc, char**argv)
                     currentWordID = currentVersion[j];
                 }
             }
+            ++currentWordID;
         }
 
-        // Run our partitioning algorithm with several different param values
-        fragmentCounts[i] = dothejob(versions, i, wsizes2);
+        if (!skipThisDoc) {
+            // Run our partitioning algorithm with several different param values
+            fragmentCounts[i] = dothejob(versions, i, wsizes2);
+        } else {
+            fragmentCounts[i] = 0;
+        }
         
         currentWordID = 0; // This is a global used by repair, see repair-algorithm/Util.h
         numVersionsReadSoFar += numVersionsPerDoc[i];
