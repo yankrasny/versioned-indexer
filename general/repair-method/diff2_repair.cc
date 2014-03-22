@@ -62,7 +62,7 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
         int numFrags = partitionAlgorithm->fragment(versions, invertedLists, 
             fragmentationCoefficient, minFragSize, numLevelsDown);
         
-        printf("Finished partitioning!\n");
+        // printf("Finished partitioning!\n");
 
         // TODO rewrite selection based on your params, not wsizes (window sizes for minnowing alg)
         // build table for each document recording total number of block and total postings
@@ -154,6 +154,7 @@ int main(int argc, char**argv)
     unsigned totalWordsInDoc;
     unsigned totalWordsInVersion;
     bool skipThisDoc = false;
+    unsigned numSkipped = 0;
 
     // In this loop, i is the docId
     for (size_t i = 0; i < docCount; ++i) // for each document -YK
@@ -170,10 +171,6 @@ int main(int argc, char**argv)
             totalWordsInDoc += totalWordsInVersion;
             if (totalWordsInDoc > MAX_NUM_WORDS_PER_DOC)
             {
-                // TODO handle this properly
-                // don't mess up the input stream pointer
-                // clean up any data you are not using
-                // continue to the next doc properly
                 skipThisDoc = true;
             } else {
                 skipThisDoc = false;
@@ -191,8 +188,6 @@ int main(int argc, char**argv)
                 }
             }
             ++currentWordID;
-            // skipThisDoc = true;
-            // currentWordID = 10083;
         }
 
         // cerr << "Starting ID for Repair: " << currentWordID << endl;
@@ -200,26 +195,27 @@ int main(int argc, char**argv)
         if (!skipThisDoc) {
             // Run our partitioning algorithm with several different param values
             fragmentCounts[i] = dothejob(versions, i, wsizes2);
+            cerr << "Document " << i << ": processed" << endl;
         } else {
             fragmentCounts[i] = 0;
+            cerr << "Document " << i << ": skipped" << endl;
+            ++numSkipped;
         }
         
         numVersionsReadSoFar += numVersionsPerDoc[i];
 
-        for (size_t v = 0; v < numVersionsPerDoc[i]; ++v)
-        {
+        for (size_t v = 0; v < numVersionsPerDoc[i]; ++v) {
             versions[v].clear();
         }
         versions.clear();
-
-        printf("Complete: %d\n", i);
     }
 
-    // delete [] documentContent;
+    cerr << "Param Selection Complete" << endl;
+    cerr << "Number of documents skipped: " << numSkipped << endl;
+
     delete [] numVersionsPerDoc;
     delete [] fragmentCounts;
 
-    // fclose(fileWikiComplete);
     inputWikiComplete.close();
     fclose(fileWikiDocSizes);
     fclose(fileWikiVersionSizes);
