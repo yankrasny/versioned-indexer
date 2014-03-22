@@ -16,7 +16,6 @@
 #include <cmath>
 #include <algorithm>
 #include "../heap.h"
-// #include "../winnow.h"
 #include "../md5.h"
 #include "../mhash.h"
 #include "../vb.h"
@@ -33,7 +32,7 @@ using namespace std;
 struct FragmentApplication
 {
     int vid;
-    int offset;
+    int offsetInVersion;
     int nodeId; // does this refer to nID in iv.h?
     bool isVoid;
 };
@@ -63,14 +62,14 @@ struct BaseFragment
     int end;
 };
 
-struct PCompare : public binary_function<frag_ptr, frag_ptr, bool>
+struct PCompare : public binary_function<FragIndexes, FragIndexes, bool>
 {
-    inline bool operator() (const frag_ptr& f1, const frag_ptr& f2)
+    inline bool operator() (const FragIndexes& f1, const FragIndexes& f2)
     {
-        if (f1.ptr == f2.ptr)
-            return f1.off < f2.off;
+        if (f1.indexInFragArray == f2.indexInFragArray)
+            return f1.indexInApplicationArray < f2.indexInApplicationArray;
         else
-            return f1.ptr < f2.ptr;
+            return f1.indexInFragArray < f2.indexInFragArray;
     }
 } comparep;
 
@@ -116,11 +115,20 @@ private:
         fread(maxid, sizeof(unsigned), size, f);
         fclose(f);
 
+        // unsigned overallMax = 0;
+
         currid[0] = 0;
         for (int i = 1; i < size; ++i)
         {
+            // if (maxid[i] > overallMax) {
+            //     overallMax = maxid[i];
+            // }
             currid[i] = currid[i-1] + maxid[i-1];
         }
+
+        // cerr << overallMax << endl;
+        // exit(1);
+
     }
 
 public:
@@ -132,7 +140,7 @@ public:
     // That makes no sense, why would you store heap indexes?
     unsigned* selectedFragIndexes; 
     
-    frag_ptr* fbuf; // TODO what is a frag_ptr?
+    FragIndexes* fbuf; // TODO what is a FragIndexes?
     unsigned char* varbyteBuffer;
     unsigned* md5_buf; // TODO
     posting* add_list;
@@ -155,7 +163,7 @@ public:
         baseFragments = vector<BaseFragment>();
 
         selectedFragIndexes = new unsigned[MAX_NUM_FRAGMENTS];
-        fbuf = new frag_ptr[5000000];        
+        fbuf = new FragIndexes[5000000];        
         varbyteBuffer = new unsigned char[50000000];
         md5_buf = new unsigned[5000000];
         add_list = new posting[1000000];
@@ -264,13 +272,13 @@ public:
         }
     }
 
-    int compact(frag_ptr* fi, int len)
+    int compact(FragIndexes* fragIndexes, int len)
     {
         int ptr1 = 0;
         int ptr2 = 1;
         while (ptr2 < len)
         {
-            while (ptr2 < len && fi[ptr2] == fi[ptr1])
+            while (ptr2 < len && fragIndexes[ptr2] == fragIndexes[ptr1])
             {
                 ptr2++;
             }
@@ -282,7 +290,7 @@ public:
             else
             {
                 ptr1++;
-                fi[ptr1] = fi[ptr2];
+                fragIndexes[ptr1] = fragIndexes[ptr2];
                 ptr2++;
             }
         }
@@ -331,26 +339,26 @@ public:
                 cptr = compact(fbuf, cptr);
                 for (int i = 0; i < cptr; i++)
                 {
-                    int idx = fbuf[i].ptr;
-                    if (i > 0 && fbuf[i].ptr != fbuf[i-1].ptr)
+                    int idx = fbuf[i].indexInFragArray;
+                    if (i > 0 && fbuf[i].indexInFragArray != fbuf[i-1].indexInFragArray)
                     {
-                        int idx2 = fbuf[i-1].ptr;
+                        int idx2 = fbuf[i-1].indexInFragArray;
                         if (fragments[idx2].numApplications > 0)
                         {
                             fragments[idx2].score = fragments[idx2].length * fragments[idx2].numApplications / (1 + fragments[idx2].length + wsize * (1 + fragments[idx2].numApplications));
                             myheap.UpdateKey(idx2, fragments[idx2].score);
                         }
                     }
-                    if (fragments[idx].applications.at(fbuf[i].off).isVoid == false)
+                    if (fragments[idx].applications.at(fbuf[i].indexInApplicationArray).isVoid == false)
                     {
                         fragments[idx].numApplications--;
-                        fragments[idx].applications.at(fbuf[i].off).isVoid = true;
+                        fragments[idx].applications.at(fbuf[i].indexInApplicationArray).isVoid = true;
                         if (fragments[idx].numApplications == 0)
                             myheap.deleteKey(idx);
                     }
                 }
 
-                idx = fbuf[cptr - 1].ptr;
+                idx = fbuf[cptr - 1].indexInFragArray;
                 if (fragments[idx].numApplications > 0)
                 {
                     fragments[idx].score = fragments[idx].length * fragments[idx].numApplications / (1 + fragments[idx].length + wsize * (1 + fragments[idx].numApplications));
@@ -386,7 +394,7 @@ public:
             int myidx = selectedFragIndexes[i];
             FragmentApplication currFragApp = fragments2[myidx].applications.at(0);
             int version = currFragApp.vid;
-            int off = currFragApp.offset;
+            int off = currFragApp.offsetInVersion;
             int len = fragments2[myidx].length;
             int size = fragments2[myidx].numApplications;
 
@@ -411,7 +419,7 @@ public:
             for (auto it = fragments2[myidx].applications.begin(); it != fragments2[myidx].applications.end(); it++)
             {
                 int a = (*it).vid + currid[docId];
-                int b = (*it).offset;
+                int b = (*it).offsetInVersion;
                 VBYTE_ENCODE(varbyteBufferPtr, a);
                 VBYTE_ENCODE(varbyteBufferPtr, b);
             }
@@ -585,13 +593,9 @@ public:
             return 0;
         }
         unsigned hh, lh;
-        int ins;
-        int block_num = 0; // Replacing this with numFragsInVersion
-        int error;
-        int ep;
+        int fragIndex;
+        int endCurrentFrag;
 
-        int merge_size = 1;
-        
         unsigned* versionPartitionSizes = new unsigned[versions.size()];
         unsigned* offsetsAllVersions = new unsigned[versions.size() * MAX_NUM_FRAGMENTS_PER_VERSION];
 
@@ -630,37 +634,37 @@ public:
                 // TODO check these bounds for j
                 for (int j = 0; j < numFragsInVersion; j++)
                 {
-                    for (int l = baseFragments[j].start; l < baseFragments[j].end; l++)
+                    for (int k = baseFragments[j].start; k < baseFragments[j].end; k++)
                     {
-                        md5_buf[l - baseFragments[j].start] = versions[v][l];
+                        md5_buf[k - baseFragments[j].start] = versions[v][k];
                     }
 
-                    ep = baseFragments[j].end;
+                    endCurrentFrag = baseFragments[j].end;
 
                     md5_init(&state);
-                    md5_append(&state, (const md5_byte_t *) md5_buf, sizeof(unsigned) * (ep - baseFragments[j].start));
+                    md5_append(&state, (const md5_byte_t *) md5_buf, sizeof(unsigned) * (endCurrentFrag - baseFragments[j].start));
                     md5_finish(&state, digest);
                     hh = *((unsigned *)digest) ;
                     lh = *((unsigned *)digest + 1) ;
-                    ins = lookupHash(lh, hh, h[0]);
+                    fragIndex = lookupHash(lh, hh, h[0]);
 
-                    // Didn't find hash for this fragment
-                    if (ins == -1)
+                    // First time we've seen this fragment
+                    if (fragIndex == -1)
                     {
                         FragmentApplication p1;
                         p1.vid = v;
-                        p1.offset = baseFragments[j].start;
+                        p1.offsetInVersion = baseFragments[j].start;
                         p1.isVoid = false;
 
                         insertHash(lh, hh, fragments_count, h[0]);
                         fragments[fragments_count].fid = fID;
                         fragments[fragments_count].numApplications = 0;
 
-                        frag_ptr fptr;
-                        fptr.ptr = fragments_count;
-                        fptr.off = fragments[fragments_count].numApplications;
+                        FragIndexes fptr;
+                        fptr.indexInFragArray = fragments_count;
+                        fptr.indexInApplicationArray = fragments[fragments_count].numApplications;
 
-                        p1.nodeId = currentInvertedList->insert(fptr, baseFragments[j].start, ep);
+                        p1.nodeId = currentInvertedList->insert(fptr, baseFragments[j].start, endCurrentFrag);
 
                         // what is nodeId?
                         if (p1.nodeId != -1)
@@ -683,24 +687,24 @@ public:
                             fID++;
                         }
                     }
-                    else // has sharing block (or "we've seen this fragment before," as I would call it -YK)
+                    else // We've seen this fragment before
                     {
-                        frag_ptr fptr;
-                        fptr.ptr = ins;
-                        fptr.off = fragments[ins].numApplications;
+                        FragIndexes fptr;
+                        fptr.indexInFragArray = fragIndex;
+                        fptr.indexInApplicationArray = fragments[fragIndex].numApplications;
                         
                         FragmentApplication p2;
                         p2.vid = v;
-                        p2.offset = baseFragments[j].start;
+                        p2.offsetInVersion = baseFragments[j].start;
                         p2.isVoid = false;
 
                         // Same as the call above, it will work once we set currentInvertedList properly (I sincerely hope -YK)
-                        p2.nodeId = currentInvertedList->insert(fptr, baseFragments[j].start, ep);
+                        p2.nodeId = currentInvertedList->insert(fptr, baseFragments[j].start, endCurrentFrag);
 
                         if (p2.nodeId != -1)
                         {
-                            fragments[ins].applications.push_back(p2);
-                            fragments[ins].numApplications++;
+                            fragments[fragIndex].applications.push_back(p2);
+                            fragments[fragIndex].numApplications++;
                         }
                     }
                 }

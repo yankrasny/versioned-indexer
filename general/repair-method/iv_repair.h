@@ -11,24 +11,21 @@
 #define MAX_NUM_NODES 1000000
 
 using namespace std;
-struct frag_ptr
+struct FragIndexes
 {
-    int ptr;
-    int off;
+    int indexInFragArray;
+    int indexInApplicationArray;
 };
 
-bool operator == (const frag_ptr& f1, const frag_ptr& f2)
+bool operator == (const FragIndexes& f1, const FragIndexes& f2)
 {
-    if (f1.ptr == f2.ptr && f1.off == f2.off)
-        return true;
-    else
-        return false;
+    return (f1.indexInFragArray == f2.indexInFragArray && f1.indexInApplicationArray == f2.indexInApplicationArray);
 }
 
 struct node
 {
     int nid;
-    frag_ptr fptr;
+    FragIndexes fptr;
     int start;
     int end;
 };
@@ -113,7 +110,7 @@ public:
     /* 
      * insert a fragment information to the inverted list structure
      */
-    int insert(const frag_ptr& fptr, int start, int end)
+    int insert(const FragIndexes& fptr, int start, int end)
     {
         --end;
         nbuf[nID].fptr = fptr;
@@ -158,19 +155,18 @@ public:
         }
     }
 
-    int find_conflict(int nID, vector<FragmentApplication>& li, int idx, frag_ptr* fbuf)
+    int find_conflict(int nID, vector<FragmentApplication>& li, int idx, FragIndexes* fbuf)
     {
         int size = inlist[nID].size();
-        list<int>::iterator its;
         int ptr = 0;
-        for (its = inlist[nID].begin(); its != inlist[nID].end(); its++)
+        for (auto it = inlist[nID].begin(); it != inlist[nID].end(); it++)
         {
-            frag_ptr& fm = nbuf[*its].fptr;
-            fbuf[ptr].ptr = fm.ptr;
-            fbuf[ptr].off = fm.off;
-            if (idx == fm.ptr)
+            FragIndexes& fm = nbuf[*it].fptr;
+            fbuf[ptr].indexInFragArray = fm.indexInFragArray;
+            fbuf[ptr].indexInApplicationArray = fm.indexInApplicationArray;
+            if (idx == fm.indexInFragArray)
             {
-                li.at(fm.off).isVoid = true;
+                li.at(fm.indexInApplicationArray).isVoid = true;
             }
             else
             {

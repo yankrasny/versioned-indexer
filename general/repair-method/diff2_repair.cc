@@ -14,9 +14,6 @@
 #include <vector>
 #include <fstream>
 
-// I believe this is the maximum size of a document in the whole data set -YK
-#define MAXSIZE 81985059
-
 // This is a row in the tradeoff table (metadata vs index size)
 struct TradeoffRecord
 {
@@ -72,7 +69,7 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
         vector<TradeoffRecord> TradeoffTable;
         TradeoffRecord tradeoffRecord;
         memset(fn, 0, 256);
-        sprintf(fn, "test/%d.2", docId);
+        sprintf(fn, "test/meta-vs-index-tradeoff-%d", docId);
         f = fopen(fn, "w");
 
         // Iterate over values of the window size param
@@ -117,8 +114,8 @@ unsigned currentOffset = 0;
 int main(int argc, char**argv)
 {
     partitionAlgorithm = new GeneralPartitionAlgorithm();
-    // int* documentContent = new int[MAXSIZE]; // the contents of one document at a time (the fread below seems to overwrite for each doc)
     
+    // Doc Sizes means number of versions in each doc
     FILE* fileWikiDocSizes = fopen("/data/jhe/wiki_access/numv", "rb");
     FILE* fileWikiVersionSizes = fopen("/data/jhe/wiki_access/word_size", "rb");
     
@@ -163,6 +160,8 @@ int main(int argc, char**argv)
     {
         totalWordsInDoc = 0;
         totalWordsInVersion = 0;
+        currentWordID = 0; // This is a global used by repair, see repair-algorithm/Util.h
+
         // If you're confused about the line that reads into the vector, see: http://stackoverflow.com/questions/15143670/how-can-i-use-fread-on-a-binary-file-to-read-the-data-into-a-stdvector
         auto currentVersion = vector<unsigned>();
         for (size_t v = 0; v < numVersionsPerDoc[i]; ++v) // for each version in this doc
@@ -192,7 +191,11 @@ int main(int argc, char**argv)
                 }
             }
             ++currentWordID;
+            // skipThisDoc = true;
+            // currentWordID = 10083;
         }
+
+        // cerr << "Starting ID for Repair: " << currentWordID << endl;
 
         if (!skipThisDoc) {
             // Run our partitioning algorithm with several different param values
@@ -201,7 +204,6 @@ int main(int argc, char**argv)
             fragmentCounts[i] = 0;
         }
         
-        currentWordID = 0; // This is a global used by repair, see repair-algorithm/Util.h
         numVersionsReadSoFar += numVersionsPerDoc[i];
 
         for (size_t v = 0; v < numVersionsPerDoc[i]; ++v)

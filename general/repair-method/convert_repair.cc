@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define NUM_DOCS 240179
+
 typedef struct
 {
     int total;
@@ -26,10 +28,10 @@ int comparep(const void* a1, const void* a2)
 
 int main(int argc, char** argv)
 {
-    linfo* lbuf = new linfo[240179]; // haha wow good job bro, magic #s -YK
+    linfo* lbuf = new linfo[NUM_DOCS];
     int ptr = 0;
-    unsigned* lens = new unsigned[240179];
-    memset(lens, 0,240179*sizeof(unsigned));
+    unsigned* lens = new unsigned[NUM_DOCS];
+    memset(lens, 0, NUM_DOCS * sizeof(unsigned));
     char fn[256];
     memset(fn, 0, 256);
     FILE* f2 = fopen("finfos", "wb");
@@ -69,7 +71,7 @@ int main(int argc, char** argv)
             }
             fclose(f1);
             memset(fn, 0, 256);
-            sprintf(fn, "test/%d.3", i);
+            sprintf(fn, "test/convert-%d", i);
             f1 = fopen(fn, "w");
             qsort(lbuf, ptr, sizeof(linfo), comparep);
             int ptr1 = 0;
