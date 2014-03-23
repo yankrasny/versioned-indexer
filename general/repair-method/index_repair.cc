@@ -17,7 +17,6 @@ indexer* myIndexer;
 GeneralPartitionAlgorithm* partitionAlgorithm;
 int dothejob(vector<vector<unsigned> >& versions, int docId, float wsize)
 {
-
     // TODO read your chosen variables
     // A good way to write this is to just hardcode some
     // Test the indexer, then write the code that reads params
@@ -59,7 +58,7 @@ unsigned currentOffset = 0;
 
 int main(int argc, char**argv)
 {
-        partitionAlgorithm = new GeneralPartitionAlgorithm();
+    partitionAlgorithm = new GeneralPartitionAlgorithm();
     
     // Doc Sizes means number of versions in each doc
     FILE* fileWikiDocSizes = fopen("/data/jhe/wiki_access/numv", "rb");

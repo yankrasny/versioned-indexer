@@ -47,15 +47,9 @@ struct FragmentApplication
 // Looks like my FragInfo -YK
 struct FragmentInfo
 {
-    // the fragment id
-    int fid;
-
-    // length of the fragment in words
-    int length; 
-    
-    // i think this is the number of applications, but why do you need that if we can get it from the vector?
-    int numApplications;
-
+    int fid; // the fragment id
+    int length; // length of the fragment in words
+    int numApplications; // i think this is the number of applications, but why do you need that if we can get it from the vector?
     double score;
     vector<FragmentApplication> applications;
 };
@@ -84,7 +78,7 @@ struct posting
 {
     unsigned wid; // word ID
     unsigned vid; // version ID
-    unsigned pos; // position? wtf man...
+    unsigned pos; // position in version
 };
 
 class GeneralPartitionAlgorithm
@@ -106,9 +100,6 @@ private:
     
     unsigned* maxid; // TODO
     unsigned* currid; // TODO current ID of what? is this an array?
-    // int* bound_buf; // the partition boundary buffer
-
-    
 
     // int total_level; // TODO where is this initialized?
 
@@ -401,16 +392,16 @@ public:
             int myidx = selectedFragIndexes[i];
             FragmentApplication currFragApp = fragments2[myidx].applications.at(0);
             int version = currFragApp.vid;
-            int off = currFragApp.offsetInVersion;
+            int offsetInVersion = currFragApp.offsetInVersion;
             int len = fragments2[myidx].length;
-            int size = fragments2[myidx].numApplications;
+            int numApplications = fragments2[myidx].numApplications;
 
-            // Iterate over ... TODO
-            for (int j = off; j < off + len; j++)
+            // Iterate over the indexes in the current frag app
+            for (int j = offsetInVersion; j < offsetInVersion + len; j++)
             {
                 // add_list looks like the output variable here
                 add_list[add_list_len].vid = i + base_frag;
-                add_list[add_list_len].pos = j - off;
+                add_list[add_list_len].pos = j - offsetInVersion;
                 add_list[add_list_len].wid = versions[version][j];
                 ++add_list_len;
             }
@@ -420,8 +411,9 @@ public:
                 putting it into a file called frag_%d.info (see the end of this function)
 
             */
+
             VBYTE_ENCODE(varbyteBufferPtr, len);            
-            VBYTE_ENCODE(varbyteBufferPtr, size);
+            VBYTE_ENCODE(varbyteBufferPtr, numApplications);
 
             for (auto it = fragments2[myidx].applications.begin(); it != fragments2[myidx].applications.end(); it++)
             {
@@ -445,7 +437,7 @@ public:
         base_frag += numSelectedFrags;
 
         // ok, now we're writing the varbyte encoded stuff somewhere, might be important
-        fwrite(varbyteBuffer, sizeof(unsigned char), varbyteBufferPtr - varbyteBuffer, ffrag);
+        // fwrite(varbyteBuffer, sizeof(unsigned char), varbyteBufferPtr - varbyteBuffer, ffrag);
 
         // clear the vector<p> in each fragment
         for (int i = 0; i < fragments_count; i++)
@@ -524,7 +516,8 @@ public:
     */
     void cutAllVersions(vector<vector<unsigned> >& versions,
         unsigned* offsetsAllVersions, unsigned* versionPartitionSizes,
-        float fragmentationCoefficient, unsigned minFragSize, unsigned method)
+        float fragmentationCoefficient, unsigned minFragSize, 
+        const vector<unsigned>& numLevelsDownArray)
     {
         // This class is used as a wrapper around repair (See RepairPartitioningPrototype.h)
         RepairPartitioningPrototype prototype;
@@ -536,7 +529,7 @@ public:
             versionPartitionSizes,
             minFragSize,
             fragmentationCoefficient,
-            method);
+            numLevelsDownArray);
 
         // Set the variables that Jinru needs
         // Note: converting back to ints
@@ -550,11 +543,6 @@ public:
                 cerr << "totalNumFrags " << totalNumFrags << endl;
                 exit(1);
             }
-            // TODO remove this senseless duplication
-            // for (int j = 0; j < numFragsInVersion; ++j)
-            // {
-            //     this->bound_buf[totalNumFrags + j] = (int) offsetsAllVersions[totalNumFrags + j];
-            // }
             totalNumFrags += numFragsInVersion;
         }
     }
@@ -593,7 +581,7 @@ public:
 
     */
     int fragment(vector<vector<unsigned> >& versions, iv* invertedLists, 
-        float fragmentationCoefficient, unsigned minFragSize, unsigned method)
+        float fragmentationCoefficient, unsigned minFragSize, const vector<unsigned>& numLevelsDownArray)
     {
         if (versions.size() == 0)
         {
@@ -615,7 +603,7 @@ public:
 
         this->cutAllVersions(versions,
             offsetsAllVersions, versionPartitionSizes,
-            fragmentationCoefficient, minFragSize, method);
+            fragmentationCoefficient, minFragSize, numLevelsDownArray);
         
         unsigned totalCountFragments(0);
         unsigned totalCountOffsets(0);
