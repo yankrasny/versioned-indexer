@@ -19,15 +19,22 @@
 #include "../md5.h"
 #include "../mhash.h"
 #include "../vb.h"
-
-// Integration with Repair Partitioning code
 #include "../Repair-Partitioning/prototype/RepairPartitioningPrototype.h"
+using namespace std;
 
 #define MAX_NUM_BASE_FRAGMENTS 200000
 #define MAX_NUM_FRAGMENTS 20000000
 #define MAX_NUM_WORDS_PER_DOC 500000
 
-using namespace std;
+
+// This is a row in the tradeoff table (metadata vs index size)
+struct TradeoffRecord
+{
+    int numFragApplications; // number of fragment applications
+    int numDistinctFrags; // number of distinct fragments
+    int numPostings; // total number of postings
+    float wsize; // the window size (a param used in Jinru's experiments)
+};
 
 struct FragmentApplication
 {

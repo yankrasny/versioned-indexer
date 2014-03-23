@@ -13,33 +13,8 @@
 #include <iterator>
 #include <vector>
 #include <fstream>
-
-// This is a row in the tradeoff table (metadata vs index size)
-struct TradeoffRecord
-{
-    int numFragApplications; // number of fragment applications
-    int numDistinctFrags; // number of distinct fragments
-    int numPostings; // total number of postings
-    float wsize; // the window size (a param used in Jinru's experiments)
-};
-
-// TODO this isn't used anywhere, remove if safe to do so
-struct CompareFunctor
-{
-    bool operator()(const TradeoffRecord& l1, const TradeoffRecord& l2)
-    {
-        if (l1.numFragApplications == l2.numFragApplications)
-        {
-            return l1.numPostings < l2.numPostings;
-        }
-        else
-        {
-            return l1.numFragApplications < l2.numFragApplications;
-        }
-    }
-} compareb;
-
 #include "general_partition_repair.h"
+using namespace std;
 
 GeneralPartitionAlgorithm* partitionAlgorithm;
 int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double>& wsizes2)
@@ -144,8 +119,11 @@ int main(int argc, char**argv)
 
     int numVersionsReadSoFar = 0;
 
-    // use this to test a small number of docs
-    docCount = 100;
+    if (argc > 1)
+    {
+        // use this to test a small number of docs
+        docCount = atoi(argv[1]);
+    }
 
     // Gets populated in the loop below
     // fragmentCounts[i] is the number of fragments in the partitioning doc i
@@ -220,7 +198,7 @@ int main(int argc, char**argv)
     fclose(fileWikiDocSizes);
     fclose(fileWikiVersionSizes);
 
-    FILE* successFile = fopen("SUCCESS!", "w");
+    FILE* successFile = fopen("SUCCESS PARAM SELECTION!", "w");
     fclose(successFile);
 
     delete partitionAlgorithm;
