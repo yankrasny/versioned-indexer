@@ -437,7 +437,7 @@ public:
         base_frag += numSelectedFrags;
 
         // ok, now we're writing the varbyte encoded stuff somewhere, might be important
-        // fwrite(varbyteBuffer, sizeof(unsigned char), varbyteBufferPtr - varbyteBuffer, ffrag);
+        fwrite(varbyteBuffer, sizeof(unsigned char), varbyteBufferPtr - varbyteBuffer, ffrag);
 
         // clear the vector<p> in each fragment
         for (int i = 0; i < fragments_count; i++)
@@ -517,7 +517,7 @@ public:
     void cutAllVersions(vector<vector<unsigned> >& versions,
         unsigned* offsetsAllVersions, unsigned* versionPartitionSizes,
         float fragmentationCoefficient, unsigned minFragSize, 
-        const vector<unsigned>& numLevelsDownArray)
+        unsigned method)
     {
         // This class is used as a wrapper around repair (See RepairPartitioningPrototype.h)
         RepairPartitioningPrototype prototype;
@@ -529,7 +529,7 @@ public:
             versionPartitionSizes,
             minFragSize,
             fragmentationCoefficient,
-            numLevelsDownArray);
+            method)
 
         // Set the variables that Jinru needs
         // Note: converting back to ints
@@ -581,7 +581,7 @@ public:
 
     */
     int fragment(vector<vector<unsigned> >& versions, iv* invertedLists, 
-        float fragmentationCoefficient, unsigned minFragSize, const vector<unsigned>& numLevelsDownArray)
+        float fragmentationCoefficient, unsigned minFragSize, unsigned method)
     {
         if (versions.size() == 0)
         {
@@ -603,7 +603,7 @@ public:
 
         this->cutAllVersions(versions,
             offsetsAllVersions, versionPartitionSizes,
-            fragmentationCoefficient, minFragSize, numLevelsDownArray);
+            fragmentationCoefficient, minFragSize, method);
         
         unsigned totalCountFragments(0);
         unsigned totalCountOffsets(0);
