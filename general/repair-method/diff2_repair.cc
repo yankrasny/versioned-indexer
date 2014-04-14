@@ -34,7 +34,7 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
         unsigned numLevelsDown = 5;
         float fragmentationCoefficient = 1.0;
         float minFragSize = 100;
-        
+
         int numFrags = partitionAlgorithm->fragment(
             versions,
             invertedLists,

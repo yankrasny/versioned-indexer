@@ -125,9 +125,6 @@ private:
 
 public:
 
-
-    vector<BaseFragment> baseFragments;
-
     // I think these are the indexes in the heap of good fragments
     // That makes no sense, why would you store heap indexes?
     unsigned* selectedFragIndexes; 
@@ -152,8 +149,6 @@ public:
 
     GeneralPartitionAlgorithm(int para = 0, int maxblock = 0, int blayer = 0, int pTotal = 0) : myheap(MAX_NUM_FRAGMENTS)
     {
-        baseFragments = vector<BaseFragment>();
-
         selectedFragIndexes = new unsigned[MAX_NUM_FRAGMENTS];
         fbuf = new FragIndexes[5000000];        
         varbyteBuffer = new unsigned char[50000000];
@@ -525,7 +520,7 @@ public:
             baseFragmentsAllVersions,
             numLevelsDown,
             minFragSize,
-            fragmentationCoefficient)
+            fragmentationCoefficient);
 
         // Check for max number of frags
         BaseFragment frag;
@@ -533,10 +528,10 @@ public:
         assert(versions.size() == baseFragmentsAllVersions.size());
         for (auto it = baseFragmentsAllVersions.begin(); it != baseFragmentsAllVersions.end(); ++it) {
             baseFragList = (*it);
+            unsigned v = baseFragList.getVersionNum();
             if (baseFragList.size() > MAX_NUM_FRAGMENTS_PER_VERSION)
             {
-                cerr << "numFragsInVersion " << i << ": " << numFragsInVersion << endl;
-                cerr << "totalNumFrags " << totalNumFrags << endl;
+                cerr << "Version " << v << ", number of candidate frags: " << baseFragList.size() << endl;
                 exit(1);
             }
         }
@@ -590,6 +585,8 @@ public:
         int fragIndex;
         int endCurrentFrag;
 
+        BaseFragmentsAllVersions baseFragmentsAllVersions = BaseFragmentsAllVersions();
+
         // Populates baseFragments, the frags for all versions
         this->cutAllVersions(
             versions,
@@ -604,28 +601,32 @@ public:
             It's organized by version id, so it'll a vector of vectors
             vector<vector<BaseFragment> > baseFragmentsAllVersions TODO define as such
         */
+
+        BaseFragmentList baseFragmentsForVersion;
+        unsigned v;
         
-        for (int v = 0; v < versions.size(); ++v)
-        {
-            // TODO define these data structures
-            baseFragsForVersion = baseFragmentsAllVersions[v];
+        for (auto it = baseFragmentsAllVersions.begin(); it != baseFragmentsAllVersions.end(); ++it) {
+
+            baseFragmentsForVersion = (*it);
+
+            v = baseFragmentsForVersion.getVersionNum();
 
             // TODO rename this, it's not an inverted list
             iv* currentInvertedList = &invertedLists[v];
 
             // j iterates over all the base fragments
-            for (int j = 0; j < baseFragsForVersion.size(); j++)
+            for (int j = 0; j < baseFragmentsForVersion.size(); j++)
             {
                 // k iterates over the current base fragment
-                for (int k = baseFragsForVersion[j].start; k < baseFragsForVersion[j].end; k++)
+                for (int k = baseFragmentsForVersion.get(j).start; k < baseFragmentsForVersion.get(j).end; k++)
                 {
-                    md5_buf[k - baseFragsForVersion[j].start] = versions[v][k];
+                    md5_buf[k - baseFragmentsForVersion.get(j).start] = versions[v][k];
                 }
 
-                endCurrentFrag = baseFragsForVersion[j].end;
+                endCurrentFrag = baseFragmentsForVersion.get(j).end;
 
                 md5_init(&state);
-                md5_append(&state, (const md5_byte_t *) md5_buf, sizeof(unsigned) * (endCurrentFrag - baseFragsForVersion[j].start));
+                md5_append(&state, (const md5_byte_t *) md5_buf, sizeof(unsigned) * (endCurrentFrag - baseFragmentsForVersion.get(j).start));
                 md5_finish(&state, digest);
                 hh = *((unsigned *)digest) ;
                 lh = *((unsigned *)digest + 1) ;
@@ -636,7 +637,7 @@ public:
                 {
                     FragmentApplication p1;
                     p1.vid = v;
-                    p1.offsetInVersion = baseFragsForVersion[j].start;
+                    p1.offsetInVersion = baseFragmentsForVersion.get(j).start;
                     p1.isVoid = false;
 
                     insertHash(lh, hh, fragments_count, h[0]);
@@ -647,15 +648,16 @@ public:
                     fptr.indexInFragArray = fragments_count;
                     fptr.indexInApplicationArray = fragments[fragments_count].numApplications;
 
-                    p1.nodeId = currentInvertedList->insert(fptr, baseFragsForVersion[j].start, endCurrentFrag);
+                    p1.nodeId = currentInvertedList->insert(fptr, baseFragmentsForVersion.get(j).start, endCurrentFrag);
 
                     // what is nodeId?
                     if (p1.nodeId != -1)
                     {
-                        fragments[fragments_count].length = baseFragsForVersion[j].end - baseFragsForVersion[j].start;
+                        fragments[fragments_count].length = baseFragmentsForVersion.get(j).end - baseFragmentsForVersion.get(j).start;
                         if (fragments[fragments_count].length < 0)
                         {
-                            printf("Error... block number: %d, prev bound: %d, current bound: %d\n", j, offsetsAllVersions[j], offsetsAllVersions[j + 1]);
+                            printf("Error... block number: %d, prev bound: %d, current bound: %d\n", j, 
+                                baseFragmentsForVersion.get(j), baseFragmentsForVersion.get(j + 1));
                             return -1;
                         }
                         fragments[fragments_count].applications.push_back(p1);
@@ -678,11 +680,11 @@ public:
                     
                     FragmentApplication p2;
                     p2.vid = v;
-                    p2.offsetInVersion = baseFragsForVersion[j].start;
+                    p2.offsetInVersion = baseFragmentsForVersion.get(j).start;
                     p2.isVoid = false;
 
                     // Same as the call above, it will work once we set currentInvertedList properly (I sincerely hope -YK)
-                    p2.nodeId = currentInvertedList->insert(fptr, baseFragsForVersion[j].start, endCurrentFrag);
+                    p2.nodeId = currentInvertedList->insert(fptr, baseFragmentsForVersion.get(j).start, endCurrentFrag);
 
                     if (p2.nodeId != -1)
                     {
