@@ -24,11 +24,16 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, float wsize)
     iv* invertedLists = new iv[versions.size()];
     partitionAlgorithm->init();
 
+    unsigned numLevelsDown = 5;
     float fragmentationCoefficient = 1.0;
     float minFragSize = 100;
-    unsigned numLevelsDown = 5;
-    int numFrags = partitionAlgorithm->fragment(versions, invertedLists, 
-        fragmentationCoefficient, minFragSize, numLevelsDown);
+
+    int numFrags = partitionAlgorithm->fragment(
+        versions,
+        invertedLists,
+        numLevelsDown, 
+        fragmentationCoefficient,
+        minFragSize);
     
     // printf("Finished partitioning!\n");
 
