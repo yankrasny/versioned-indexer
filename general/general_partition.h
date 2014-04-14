@@ -426,8 +426,10 @@ public:
         int counts = 0;
         while (counts < total_level)
         {
+            // for all the blocks returned by the cutting alg
             for ( int j = 0; j < block_num; j++)
             {
+                // Using refer as the version, so in ours, we need to pass a versionId!!!!!!!!!!
                 for ( int l = block_info2[j].start; l < block_info2[j].end; l++)
                     md5_buf[l - bound_buf[j]] = refer[l];
 
