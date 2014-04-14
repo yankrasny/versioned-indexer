@@ -64,8 +64,12 @@ int main(int argc, char** argv)
     for (int i = 0; i < atoi(argv[1]); i++)
     {
         memset(fn, 0, 256);
-        sprintf(fn, "test/%d.2", i);
+        sprintf(fn, "test/meta-vs-index-tradeoff-%d", i);
         FILE* f1 = fopen(fn, "r");
+        if (!f1) {
+            printf("skipping:%d...\n", i);    
+            continue;
+        }
         ptr = 0;
         printf("processing:%d...", i);
         if (lens2[i] > 1)
