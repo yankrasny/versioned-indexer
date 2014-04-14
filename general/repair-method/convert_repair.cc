@@ -1,3 +1,13 @@
+/*
+
+This is the global optimization using the tradeoff tables
+
+We decide on parameters for each document based on some constraints on meta data size
+
+*/
+
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

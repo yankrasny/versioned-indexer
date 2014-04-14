@@ -31,12 +31,17 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
 
         // I think wsizes is window sizes, and total is the size of that array
         // TODO these vars should not be hardcoded, if time permits we'll change it
+        unsigned numLevelsDown = 5;
         float fragmentationCoefficient = 1.0;
         float minFragSize = 100;
-        unsigned numLevelsDown = 5;
-        int numFrags = partitionAlgorithm->fragment(versions, invertedLists, 
-            fragmentationCoefficient, minFragSize, numLevelsDown);
         
+        int numFrags = partitionAlgorithm->fragment(
+            versions,
+            invertedLists,
+            numLevelsDown, 
+            fragmentationCoefficient,
+            minFragSize);
+
         // printf("Finished partitioning!\n");
 
         // TODO rewrite selection based on your params, not wsizes (window sizes for minnowing alg)

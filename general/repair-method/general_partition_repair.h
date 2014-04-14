@@ -57,12 +57,6 @@ struct FragmentInfo
 // Inverted list class
 #include "iv_repair.h"
 
-struct BaseFragment
-{
-    int start;
-    int end;
-};
-
 struct PCompare : public binary_function<FragIndexes, FragIndexes, bool>
 {
     inline bool operator() (const FragIndexes& f1, const FragIndexes& f2)
@@ -514,36 +508,37 @@ public:
     /*
         Yan's version of cut, works on all versions at once using RePair
     */
-    void cutAllVersions(vector<vector<unsigned> >& versions,
-        unsigned* offsetsAllVersions, unsigned* versionPartitionSizes,
-        float fragmentationCoefficient, unsigned minFragSize, 
-        unsigned method)
+    void cutAllVersions(
+        vector<vector<unsigned> >& versions,
+        BaseFragmentsAllVersions& baseFragmentsAllVersions,
+        unsigned numLevelsDown,
+        unsigned minFragSize,
+        float fragmentationCoefficient)
     {
+        // TODO carry this through: baseFragmentsAllVersions
         // This class is used as a wrapper around repair (See RepairPartitioningPrototype.h)
         RepairPartitioningPrototype prototype;
 
         // Run Repair Partitioning
         double score = prototype.runRepairPartitioning(
             versions,
-            offsetsAllVersions,
-            versionPartitionSizes,
+            baseFragmentsAllVersions,
+            numLevelsDown,
             minFragSize,
-            fragmentationCoefficient,
-            method)
+            fragmentationCoefficient)
 
-        // Set the variables that Jinru needs
-        // Note: converting back to ints
-        unsigned totalNumFrags(0);
-        for (int i = 0; i < versions.size(); ++i)
-        {
-            unsigned numFragsInVersion = versionPartitionSizes[i];
-            if (numFragsInVersion > MAX_NUM_FRAGMENTS_PER_VERSION)
+        // Check for max number of frags
+        BaseFragment frag;
+        BaseFragmentList baseFragList;
+        assert(versions.size() == baseFragmentsAllVersions.size());
+        for (auto it = baseFragmentsAllVersions.begin(); it != baseFragmentsAllVersions.end(); ++it) {
+            baseFragList = (*it);
+            if (baseFragList.size() > MAX_NUM_FRAGMENTS_PER_VERSION)
             {
                 cerr << "numFragsInVersion " << i << ": " << numFragsInVersion << endl;
                 cerr << "totalNumFrags " << totalNumFrags << endl;
                 exit(1);
             }
-            totalNumFrags += numFragsInVersion;
         }
     }
 
@@ -580,8 +575,12 @@ public:
             Call invertedLists[v].complete();
 
     */
-    int fragment(vector<vector<unsigned> >& versions, iv* invertedLists, 
-        float fragmentationCoefficient, unsigned minFragSize, unsigned method)
+    int fragment(
+        vector<vector<unsigned> >& versions,
+        iv* invertedLists,
+        unsigned numLevelsDown,
+        float fragmentationCoefficient,
+        unsigned minFragSize)
     {
         if (versions.size() == 0)
         {
@@ -591,129 +590,112 @@ public:
         int fragIndex;
         int endCurrentFrag;
 
-        unsigned* versionPartitionSizes = new unsigned[versions.size()];
-        unsigned* offsetsAllVersions = new unsigned[versions.size() * MAX_NUM_FRAGMENTS_PER_VERSION];
+        // Populates baseFragments, the frags for all versions
+        this->cutAllVersions(
+            versions,
+            baseFragmentsAllVersions,
+            numLevelsDown,
+            fragmentationCoefficient,
+            minFragSize);
 
-        // Initialize to a known invalid value
-        for (size_t i = 0; i < versions.size(); ++i)
-        {
-            versionPartitionSizes[i] = MAX_NUM_FRAGMENTS_PER_VERSION + 1;
-            // TODO optional: init offsetsAllVersions to 0
-        }
-
-        this->cutAllVersions(versions,
-            offsetsAllVersions, versionPartitionSizes,
-            fragmentationCoefficient, minFragSize, method);
+        /*
+            At this point, baseFragments contains all the fragments 
+            for this document from repair partitioning
+            It's organized by version id, so it'll a vector of vectors
+            vector<vector<BaseFragment> > baseFragmentsAllVersions TODO define as such
+        */
         
-        unsigned totalCountFragments(0);
-        unsigned totalCountOffsets(0);
         for (int v = 0; v < versions.size(); ++v)
         {
-            assert(versionPartitionSizes[v] > 1);
-            unsigned numFragsInVersion = versionPartitionSizes[v] - 1;            
+            // TODO define these data structures
+            baseFragsForVersion = baseFragmentsAllVersions[v];
+
+            // TODO rename this, it's not an inverted list
             iv* currentInvertedList = &invertedLists[v];
-            for (int j = 0; j < numFragsInVersion; ++j)
-            {
-                BaseFragment currFrag;
-                currFrag.start = (int)offsetsAllVersions[totalCountOffsets + j];
-                currFrag.end = (int)offsetsAllVersions[totalCountOffsets + j + 1];
-                baseFragments.push_back(currFrag);
-            }
 
-            /* At this point, baseFragments contains the fragments from repair partitioning */
-
-            // Jinru's frag optimization, right? -YK
-            int counts = 0;
-            while (counts < 1) // counts < total_level
+            // j iterates over all the base fragments
+            for (int j = 0; j < baseFragsForVersion.size(); j++)
             {
-                // TODO check these bounds for j
-                for (int j = 0; j < numFragsInVersion; j++)
+                // k iterates over the current base fragment
+                for (int k = baseFragsForVersion[j].start; k < baseFragsForVersion[j].end; k++)
                 {
-                    for (int k = baseFragments[j].start; k < baseFragments[j].end; k++)
+                    md5_buf[k - baseFragsForVersion[j].start] = versions[v][k];
+                }
+
+                endCurrentFrag = baseFragsForVersion[j].end;
+
+                md5_init(&state);
+                md5_append(&state, (const md5_byte_t *) md5_buf, sizeof(unsigned) * (endCurrentFrag - baseFragsForVersion[j].start));
+                md5_finish(&state, digest);
+                hh = *((unsigned *)digest) ;
+                lh = *((unsigned *)digest + 1) ;
+                fragIndex = lookupHash(lh, hh, h[0]);
+
+                // First time we've seen this fragment
+                if (fragIndex == -1)
+                {
+                    FragmentApplication p1;
+                    p1.vid = v;
+                    p1.offsetInVersion = baseFragsForVersion[j].start;
+                    p1.isVoid = false;
+
+                    insertHash(lh, hh, fragments_count, h[0]);
+                    fragments[fragments_count].fid = fID;
+                    fragments[fragments_count].numApplications = 0;
+
+                    FragIndexes fptr;
+                    fptr.indexInFragArray = fragments_count;
+                    fptr.indexInApplicationArray = fragments[fragments_count].numApplications;
+
+                    p1.nodeId = currentInvertedList->insert(fptr, baseFragsForVersion[j].start, endCurrentFrag);
+
+                    // what is nodeId?
+                    if (p1.nodeId != -1)
                     {
-                        md5_buf[k - baseFragments[j].start] = versions[v][k];
-                    }
-
-                    endCurrentFrag = baseFragments[j].end;
-
-                    md5_init(&state);
-                    md5_append(&state, (const md5_byte_t *) md5_buf, sizeof(unsigned) * (endCurrentFrag - baseFragments[j].start));
-                    md5_finish(&state, digest);
-                    hh = *((unsigned *)digest) ;
-                    lh = *((unsigned *)digest + 1) ;
-                    fragIndex = lookupHash(lh, hh, h[0]);
-
-                    // First time we've seen this fragment
-                    if (fragIndex == -1)
-                    {
-                        FragmentApplication p1;
-                        p1.vid = v;
-                        p1.offsetInVersion = baseFragments[j].start;
-                        p1.isVoid = false;
-
-                        insertHash(lh, hh, fragments_count, h[0]);
-                        fragments[fragments_count].fid = fID;
-                        fragments[fragments_count].numApplications = 0;
-
-                        FragIndexes fptr;
-                        fptr.indexInFragArray = fragments_count;
-                        fptr.indexInApplicationArray = fragments[fragments_count].numApplications;
-
-                        p1.nodeId = currentInvertedList->insert(fptr, baseFragments[j].start, endCurrentFrag);
-
-                        // what is nodeId?
-                        if (p1.nodeId != -1)
+                        fragments[fragments_count].length = baseFragsForVersion[j].end - baseFragsForVersion[j].start;
+                        if (fragments[fragments_count].length < 0)
                         {
-                            fragments[fragments_count].length = baseFragments[j].end - baseFragments[j].start;
-                            if (fragments[fragments_count].length < 0)
-                            {
-                                printf("Error... block number: %d, prev bound: %d, current bound: %d\n", j, offsetsAllVersions[j], offsetsAllVersions[j + 1]);
-                                return -1;
-                            }
-                            fragments[fragments_count].applications.push_back(p1);
-                            fragments[fragments_count].numApplications++;
-                            fragments_count++;
-                            if (fragments_count >= MAX_NUM_FRAGMENTS)
-                            {
-                                // This error message sucks. fragments_count looks like the number of inverted lists
-                                printf("Too many fragments!\n");
-                                exit(0);
-                            }
-                            fID++;
+                            printf("Error... block number: %d, prev bound: %d, current bound: %d\n", j, offsetsAllVersions[j], offsetsAllVersions[j + 1]);
+                            return -1;
                         }
-                    }
-                    else // We've seen this fragment before
-                    {
-                        FragIndexes fptr;
-                        fptr.indexInFragArray = fragIndex;
-                        fptr.indexInApplicationArray = fragments[fragIndex].numApplications;
-                        
-                        FragmentApplication p2;
-                        p2.vid = v;
-                        p2.offsetInVersion = baseFragments[j].start;
-                        p2.isVoid = false;
-
-                        // Same as the call above, it will work once we set currentInvertedList properly (I sincerely hope -YK)
-                        p2.nodeId = currentInvertedList->insert(fptr, baseFragments[j].start, endCurrentFrag);
-
-                        if (p2.nodeId != -1)
+                        fragments[fragments_count].applications.push_back(p1);
+                        fragments[fragments_count].numApplications++;
+                        fragments_count++;
+                        if (fragments_count >= MAX_NUM_FRAGMENTS)
                         {
-                            fragments[fragIndex].applications.push_back(p2);
-                            fragments[fragIndex].numApplications++;
+                            // This error message sucks. fragments_count looks like the number of inverted lists
+                            printf("Too many fragments!\n");
+                            exit(0);
                         }
+                        fID++;
                     }
                 }
-                counts++;
+                else // We've seen this fragment before
+                {
+                    FragIndexes fptr;
+                    fptr.indexInFragArray = fragIndex;
+                    fptr.indexInApplicationArray = fragments[fragIndex].numApplications;
+                    
+                    FragmentApplication p2;
+                    p2.vid = v;
+                    p2.offsetInVersion = baseFragsForVersion[j].start;
+                    p2.isVoid = false;
+
+                    // Same as the call above, it will work once we set currentInvertedList properly (I sincerely hope -YK)
+                    p2.nodeId = currentInvertedList->insert(fptr, baseFragsForVersion[j].start, endCurrentFrag);
+
+                    if (p2.nodeId != -1)
+                    {
+                        fragments[fragIndex].applications.push_back(p2);
+                        fragments[fragIndex].numApplications++;
+                    }
+                }
             }
-            totalCountFragments += numFragsInVersion;
-            totalCountOffsets += versionPartitionSizes[v];
+
             currentInvertedList->complete();
         }
 
-        delete [] versionPartitionSizes;
-        delete [] offsetsAllVersions;
-
-        return totalCountFragments;
+        return 0; // TODO this should be totalNumFragments, but really we won't use it actively
     }
 
 };
