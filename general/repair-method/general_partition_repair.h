@@ -33,7 +33,7 @@ struct TradeoffRecord
     int numFragApplications; // number of fragment applications
     int numDistinctFrags; // number of distinct fragments
     int numPostings; // total number of postings
-    float wsize; // the window size (a param used in Jinru's experiments)
+    double numLevelsDown; // number of levels we traverse in the repair tree (more = possibly smaller fragments)
 };
 
 struct FragmentApplication
@@ -82,6 +82,8 @@ private:
     int fID; // the current fragment ID, gets incremented every time we create a fragment
     
     heap myheap; // the heap we use to rank fragments
+
+    RepairAlgorithm repairAlg;
     
     // md5 vars
     static const unsigned W_SET = 4;
@@ -147,14 +149,31 @@ public:
     unsigned base_frag;
     
 
-    GeneralPartitionAlgorithm(int para = 0, int maxblock = 0, int blayer = 0, int pTotal = 0) : myheap(MAX_NUM_FRAGMENTS)
+    /*
+        TODO remove the params you aren't using
+        Make sure the allocations here and in init() make sense
+            What I mean is, each document needs to do repair again, so
+            Does repair clean up after itself properly? Is it enough to just call the constructor again like we do in init()?       
+
+    */
+    GeneralPartitionAlgorithm(
+        int para = 0,
+        int maxblock = 0,
+        int blayer = 0,
+        int pTotal = 0)
+        :
+        myheap(MAX_NUM_FRAGMENTS)
     {
         selectedFragIndexes = new unsigned[MAX_NUM_FRAGMENTS];
-        fbuf = new FragIndexes[5000000];        
+        fbuf = new FragIndexes[5000000];
         varbyteBuffer = new unsigned char[50000000];
         md5_buf = new unsigned[5000000];
         add_list = new posting[1000000];
+
+        // TODO 99% sure this should be called candidateFragments
         fragments = new FragmentInfo[5000000];
+        
+        // TODO and I think this should be called selectedFragments
         fragments2 = new FragmentInfo[5000000];
         flens = new unsigned[5000000];
         
@@ -187,7 +206,7 @@ public:
 
     int dump_frag()
     {
-        for (int i = 0; i < fragments_count; i++)
+            for (int i = 0; i < fragments_count; i++)
         {
             fragments[i].numApplications = 0;
             fragments[i].applications.clear();
@@ -197,9 +216,10 @@ public:
     }
 
 
-    // Why not just put this code in the constructor?
-    int init()
+    int init(vector<vector<unsigned> >& versions)
     {
+        this->repairAlg = RepairAlgorithm(versions);
+
         add_list_len = 0;
         flens_count = 0;
         block_info_ptr = 0;
@@ -232,10 +252,8 @@ public:
         Scores the fragments and adds them to a heap
         The heap entries have score and ptr, which I think means indexInHeap
 
-        This should be called addFragmentsToHeap
-
     */
-    void addFragmentsToHeap(double wsize)
+    void addBaseFragmentsToHeap(unsigned numLevelsDown)
     {
         myheap.init();
         for (int i = 0; i < fragments_count; i++)
@@ -250,8 +268,7 @@ public:
                 it->isVoid = false;
             }
 
-            // TODO replace wsize with one of your params
-            fragments[i].score = static_cast<double>(fragments[i].length * fragments[i].numApplications) / (1 + fragments[i].length + wsize * (1 + fragments[i].numApplications)); 
+            fragments[i].score = static_cast<double>(fragments[i].length * fragments[i].numApplications) / (1 + fragments[i].length + (1 / numLevelsDown) * (1 + fragments[i].numApplications)); 
             hpost heapEntry;
             heapEntry.ptr = i;
             heapEntry.score = fragments[i].score;
@@ -288,7 +305,7 @@ public:
         Using the heap of fragments, select the best ones and add them to selectedFragIndexes
     */
     int numSelectedFrags;
-    void selectGoodFragments(iv* currentInvertedList, double wsize)
+    void selectGoodFragments(iv* currentInvertedList, unsigned numLevelsDown)
     {
         numSelectedFrags = 0;
         while (myheap.size() > 0)
@@ -332,7 +349,7 @@ public:
                         int idx2 = fbuf[i-1].indexInFragArray;
                         if (fragments[idx2].numApplications > 0)
                         {
-                            fragments[idx2].score = fragments[idx2].length * fragments[idx2].numApplications / (1 + fragments[idx2].length + wsize * (1 + fragments[idx2].numApplications));
+                            fragments[idx2].score = fragments[idx2].length * fragments[idx2].numApplications / (1 + fragments[idx2].length + (1 / numLevelsDown) * (1 + fragments[idx2].numApplications));
                             myheap.UpdateKey(idx2, fragments[idx2].score);
                         }
                     }
@@ -348,7 +365,7 @@ public:
                 idx = fbuf[cptr - 1].indexInFragArray;
                 if (fragments[idx].numApplications > 0)
                 {
-                    fragments[idx].score = fragments[idx].length * fragments[idx].numApplications / (1 + fragments[idx].length + wsize * (1 + fragments[idx].numApplications));
+                    fragments[idx].score = fragments[idx].length * fragments[idx].numApplications / (1 + fragments[idx].length + (1 / numLevelsDown) * (1 + fragments[idx].numApplications));
                     myheap.UpdateKey(idx, fragments[idx].score);
                 }
             }
@@ -370,7 +387,7 @@ public:
                 Is it anything to do with overlapping fragments?
 
     */
-    void populatePostings(vector<vector<unsigned> >& versions, int docId)
+    void populatePostings(const vector<vector<unsigned> >& versions, int docId)
     {
         add_list_len = 0;
         unsigned char* varbyteBufferPtr = varbyteBuffer;
@@ -441,7 +458,7 @@ public:
         This function populates the Tradeoff Table (between meta data size and index size)
         Check diff2_repair for the definition of TradeoffRecord
     */
-    void writeTradeoffRecord(vector<vector<unsigned> >& versions, int docId, TradeoffRecord* tradeoffRecord)
+    void writeTradeoffRecord(const vector<vector<unsigned> >& versions, int docId, TradeoffRecord* tradeoffRecord)
     {
         add_list_len = 0;
         int totalNumApplications = 0;
@@ -500,32 +517,22 @@ public:
         // }
     }
 
-    /*
-        Yan's version of cut, works on all versions at once using RePair
-    */
-    void cutAllVersions(
-        vector<vector<unsigned> >& versions,
-        BaseFragmentsAllVersions& baseFragmentsAllVersions,
-        unsigned numLevelsDown,
-        unsigned minFragSize,
-        float fragmentationCoefficient)
+    void getRepairTrees()
     {
-        // TODO carry this through: baseFragmentsAllVersions
-        // This class is used as a wrapper around repair (See RepairPartitioningPrototype.h)
-        RepairPartitioningPrototype prototype;
+        // if (versions.size() == 0)
+        // {
+        //     return 0;
+        // }
 
-        // Run Repair Partitioning
-        double score = prototype.runRepairPartitioning(
-            versions,
-            baseFragmentsAllVersions,
-            numLevelsDown,
-            minFragSize,
-            fragmentationCoefficient);
+        // Call doRepair on the instance of repairAlg in this class
+        this->repairAlg.doRepair();
+    }
 
+    void checkBaseFragments(const BaseFragmentsAllVersions& baseFragmentsAllVersions)
+    {
         // Check for max number of frags
         BaseFragment frag;
         BaseFragmentList baseFragList;
-        assert(versions.size() == baseFragmentsAllVersions.size());
         for (auto it = baseFragmentsAllVersions.begin(); it != baseFragmentsAllVersions.end(); ++it) {
             baseFragList = (*it);
             unsigned v = baseFragList.getVersionNum();
@@ -538,80 +545,35 @@ public:
     }
 
     /*
-
-        We need to set the same variables as Jinru's fragment (see general_partition.h)
-
-        Example of versionSizes, the size of each version. This means that version 0 contains 50 words, version 1 contains 52 words, etc.
-        versionSizes = [50, 52, 55, 49, 55]
-
-        int vid: versionID (0, 1, 2, ...)
-        int* refer: the contents of the current version (what I call wordIDs)
-        int len: the length of the current version (wordIDs.size())
-        int* mhbuf: hash stuff that I don't need
-        int* hbuf: hash stuff that I don't need
-        iv* currentInvertedList: passed as &invertedLists[i]
-        int* w_size: window sizes
-        int wlen: size of w_size
-
-        Local var definitions:
-            w_size: window sizes
-            bound_buf: the partition boundary buffer
-            total_level: the amount of iterations he's willing to optimize for, 
-                aka the # of times he calls the cutting alg
-            md5_buf: a buffer for storing fragment hashes?
-            type p (posting?)
-            fragments: an array of FragmentInfo
-            baseFragments: an array of blocks
-            block_num: Number of fragments
-
-        Objectives
-            Set bound_buf (same as offsetsAllVersions)
-            Set currentInvertedList (object type: iv, see iv.h): Looks like inverted list!
-            Call invertedLists[v].complete();
-
+        1) Partition the repair trees and get base fragments
+        2) Add unique fragments to a list (will add to heap in another function)
+      
+        Note: This gets called a few times with different values of numLevelsDown
+        The higher the value of numLevelsDown, the more fragments we generate
     */
-    int fragment(
-        vector<vector<unsigned> >& versions,
-        iv* invertedLists,
-        unsigned numLevelsDown,
-        float fragmentationCoefficient,
-        unsigned minFragSize)
+    int getBaseFragments(iv* invertedLists, const vector<vector<unsigned> >& versions, unsigned numLevelsDown)
     {
-        if (versions.size() == 0)
-        {
-            return 0;
-        }
         unsigned hh, lh;
         int fragIndex;
         int endCurrentFrag;
 
-        BaseFragmentsAllVersions baseFragmentsAllVersions = BaseFragmentsAllVersions();
+        BaseFragmentsAllVersions baseFragmentsAllVersions;
 
-        // Populates baseFragments, the frags for all versions
-        this->cutAllVersions(
-            versions,
-            baseFragmentsAllVersions,
-            numLevelsDown,
-            fragmentationCoefficient,
-            minFragSize);
+        // Partition the repair tree
+        this->repairAlg.getBaseFragments(baseFragmentsAllVersions, numLevelsDown);
 
-        /*
-            At this point, baseFragments contains all the fragments 
-            for this document from repair partitioning
-            It's organized by version id, so it'll a vector of vectors
-            vector<vector<BaseFragment> > baseFragmentsAllVersions TODO define as such
-        */
+        this->checkBaseFragments(baseFragmentsAllVersions);
 
+        // Hash the fragments in all versions and add the unique ones to a list
         BaseFragmentList baseFragmentsForVersion;
         unsigned v;
-        
         for (auto it = baseFragmentsAllVersions.begin(); it != baseFragmentsAllVersions.end(); ++it) {
 
             baseFragmentsForVersion = (*it);
 
             v = baseFragmentsForVersion.getVersionNum();
 
-            // TODO rename this, it's not an inverted list
+            // TODO rename this? I think it's not an inverted list
             iv* currentInvertedList = &invertedLists[v];
 
             // j iterates over all the base fragments
@@ -657,7 +619,7 @@ public:
                         if (fragments[fragments_count].length < 0)
                         {
                             printf("Error... block number: %d, prev bound: %d, current bound: %d\n", j, 
-                                baseFragmentsForVersion.get(j), baseFragmentsForVersion.get(j + 1));
+                                baseFragmentsForVersion.get(j).start, baseFragmentsForVersion.get(j).end);
                             return -1;
                         }
                         fragments[fragments_count].applications.push_back(p1);
@@ -693,11 +655,9 @@ public:
                     }
                 }
             }
-
             currentInvertedList->complete();
         }
-
-        return 0; // TODO this should be totalNumFragments, but really we won't use it actively
+        return fragments_count;
     }
 
 };

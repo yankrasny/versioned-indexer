@@ -17,7 +17,7 @@
 using namespace std;
 
 GeneralPartitionAlgorithm* partitionAlgorithm;
-int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double>& wsizes2)
+int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<unsigned>& numLevelsDownArray)
 {
     char fn[256];
     if (versions.size() != 1)
@@ -27,59 +27,62 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
         FILE* f = fopen(fn, "r");
 
         iv* invertedLists = new iv[versions.size()];
-        partitionAlgorithm->init();
+        
+        partitionAlgorithm->init(versions);
 
-        // I think wsizes is window sizes, and total is the size of that array
-        // TODO these vars should not be hardcoded, if time permits we'll change it
-        unsigned numLevelsDown = 5;
-        float fragmentationCoefficient = 1.0;
-        float minFragSize = 100;
+        // Make a copy to use after repair
+        auto versionsCopy = vector<vector<unsigned> >(versions);
 
-        int numFrags = partitionAlgorithm->fragment(
-            versions,
-            invertedLists,
-            numLevelsDown, 
-            fragmentationCoefficient,
-            minFragSize);
+        // Do repair and save the result in some form so that trees can be built for partitioning
+        partitionAlgorithm->getRepairTrees();
 
-        // printf("Finished partitioning!\n");
-
-        // TODO rewrite selection based on your params, not wsizes (window sizes for minnowing alg)
-        // build table for each document recording total number of block and total postings
+        /*
+            Build the tradeoff table for each document
+            The tradeoff is between meta data size and index size
+            The more fragments we have, the more meta data
+            We also write down how many index postings will be generated for a partitioning
+            The global index optimization will use these figures to choose a good param value for each doc
+        */
         vector<TradeoffRecord> TradeoffTable;
         TradeoffRecord tradeoffRecord;
         memset(fn, 0, 256);
         sprintf(fn, "test/meta-vs-index-tradeoff-%d", docId);
         f = fopen(fn, "w");
 
-        // Iterate over values of the window size param
-        for (int i = 0; i < wsizes2.size(); i++)
+        float fragmentationCoefficient = 1.0;
+        unsigned numLevelsDown;
+        unsigned numBaseFrags;
+        for (int i = 0; i < numLevelsDownArray.size(); i++)
         {
-            double wsize = wsizes2[i];
+            numLevelsDown = numLevelsDownArray[i];
 
-            partitionAlgorithm->addFragmentsToHeap(wsize);
+            numBaseFrags = partitionAlgorithm->getBaseFragments(invertedLists, versionsCopy, numLevelsDown);
 
-            partitionAlgorithm->selectGoodFragments(invertedLists, wsize);
+            partitionAlgorithm->addBaseFragmentsToHeap(numLevelsDown);
+
+            partitionAlgorithm->selectGoodFragments(invertedLists, numLevelsDown);
             
-            partitionAlgorithm->writeTradeoffRecord(versions, docId, &tradeoffRecord);
+            partitionAlgorithm->writeTradeoffRecord(versionsCopy, docId, &tradeoffRecord);
 
-            tradeoffRecord.wsize = wsize;
+            tradeoffRecord.numLevelsDown = numLevelsDown;
             TradeoffTable.push_back(tradeoffRecord);
-            fprintf(f, "%.2lf\t%d\t%d\t%d\n", wsize, tradeoffRecord.numDistinctFrags, tradeoffRecord.numFragApplications, tradeoffRecord.numPostings);
+            fprintf(f, "%d\t%d\t%d\t%d\n", numLevelsDown, tradeoffRecord.numDistinctFrags, 
+                tradeoffRecord.numFragApplications, tradeoffRecord.numPostings);
         }
         fclose(f);
 
         partitionAlgorithm->dump_frag();
         delete [] invertedLists;
 
-        return numFrags;
+        return numBaseFrags;
     }
     else
     {
         memset(fn, 0, 256);
         sprintf(fn, "test/%d.2", docId);
         FILE* f = fopen(fn, "w");
-        fprintf(f, "%.2lf\t%d\t%d\t%d\n", versions[0].size(), 1, 1, versions[0].size());
+        // TODO is numLevelsDown the right thing to put there?
+        fprintf(f, "%d\t%d\t%d\t%d\n", 0, 1, 1, (unsigned) versions[0].size());
         fclose(f);
         return 1;
     }
@@ -116,11 +119,16 @@ int main(int argc, char**argv)
     fread(versionSizes, sizeof(unsigned), totalNumVersions, fileWikiVersionSizes);
 
     // TODO use a similar approach (have different values in a text file) with your variables
-    ifstream fin("../options");
-    istream_iterator<double> data_begin(fin);
-    istream_iterator<double> data_end;
-    vector<double> wsizes2(data_begin, data_end);
-    fin.close();
+    // ifstream fin("../options");
+    // istream_iterator<double> data_begin(fin);
+    // istream_iterator<double> data_end;
+    // vector<double> wsizes2(data_begin, data_end);
+    // fin.close();
+
+    auto numLevelsDownArray = vector<unsigned>();
+    numLevelsDownArray.push_back(3);
+    numLevelsDownArray.push_back(5);
+    numLevelsDownArray.push_back(7);
 
     int numVersionsReadSoFar = 0;
 
@@ -177,7 +185,7 @@ int main(int argc, char**argv)
 
         if (!skipThisDoc) {
             // Run our partitioning algorithm with several different param values
-            fragmentCounts[i] = dothejob(versions, i, wsizes2);
+            fragmentCounts[i] = dothejob(versions, i, numLevelsDownArray);
             cerr << "Document " << i << ": processed" << endl;
         } else {
             fragmentCounts[i] = 0;
