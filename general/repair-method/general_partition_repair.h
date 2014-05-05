@@ -139,7 +139,7 @@ public:
     FragmentInfo* fragments; // an array of FragmentInfo, I think this is the general fragment pool
     int fragments_count; // size of fragments
 
-    FragmentInfo* fragments2; // an array of FragmentInfo, I think this is a subset of fragments (really uncertain about that)
+    FragmentInfo* selectedFragments; // an array of FragmentInfo, I think this is a subset of fragments (really uncertain about that)
 
     
     int block_info_ptr;
@@ -174,7 +174,7 @@ public:
         fragments = new FragmentInfo[5000000];
         
         // TODO and I think this should be called selectedFragments
-        fragments2 = new FragmentInfo[5000000];
+        selectedFragments = new FragmentInfo[5000000];
         flens = new unsigned[5000000];
         
         fID = 0;
@@ -196,7 +196,7 @@ public:
         delete [] md5_buf;
         delete [] add_list;
         delete [] fragments;
-        delete [] fragments2;
+        delete [] selectedFragments;
         delete [] flens;
 
         fclose(ffrag);
@@ -206,7 +206,7 @@ public:
 
     int dump_frag()
     {
-            for (int i = 0; i < fragments_count; i++)
+        for (int i = 0; i < fragments_count; i++)
         {
             fragments[i].numApplications = 0;
             fragments[i].applications.clear();
@@ -308,16 +308,16 @@ public:
     void selectGoodFragments(iv* currentInvertedList, unsigned numLevelsDown)
     {
         numSelectedFrags = 0;
+        hpost heapEntry;
         while (myheap.size() > 0)
         {
-            hpost heapEntry = myheap.top();
+            heapEntry = myheap.top();
             selectedFragIndexes[numSelectedFrags++] = heapEntry.ptr;
             myheap.pop();
 
             /*
-                TODO finish explanation
                 iterate over the current fragment's applications
-                if the application is valid, then add it to fragments2?
+                if the application has conflicts, record them
             */
             int idx = heapEntry.ptr;
             int cptr = 0;
@@ -325,17 +325,20 @@ public:
             {
                 if (it->isVoid == false)
                 {
-                    fragments2[idx].applications.push_back(*it);
+                    // Add the frag application to the list for the current selected fragment object
+                    selectedFragments[idx].applications.push_back(*it);
                     int len = currentInvertedList[it->vid].find_conflict(it->nodeId, fragments[idx].applications, heapEntry.ptr, &fbuf[cptr]);
                     cptr += len;
                 }
             }
-            fragments2[idx].numApplications = fragments2[idx].applications.size();
-            fragments2[idx].length = fragments[idx].length;
+
+            selectedFragments[idx].numApplications = selectedFragments[idx].applications.size();
+            selectedFragments[idx].length = fragments[idx].length;
 
             /*
-                It looks like we're handling fragment conflicts here
-                If there are some conflicts, then go through them and update scores and other vars for the fragments involved
+                Handle fragment conflicts here
+                If the current frag application conflicts with other frags
+                    then go through them and update scores and other vars for the fragments involved
             */
             if (cptr > 0)
             {
@@ -381,11 +384,6 @@ public:
             I think this function has another goal, something to do with varbyteBuffer
                 There's an fwrite of that varbyte content, need to understand that better
 
-        Notes:
-
-            What's the relationship between fragments and fragments2?
-                Is it anything to do with overlapping fragments?
-
     */
     void populatePostings(const vector<vector<unsigned> >& versions, int docId)
     {
@@ -396,16 +394,18 @@ public:
         for (int i = 0; i < numSelectedFrags; i++)
         {
             int myidx = selectedFragIndexes[i];
-            FragmentApplication currFragApp = fragments2[myidx].applications.at(0);
+
+            // Grab the first frag application, we can generate all the 
+            // postings we need without looking at the other ones
+            FragmentApplication currFragApp = selectedFragments[myidx].applications.at(0);
             int version = currFragApp.vid;
             int offsetInVersion = currFragApp.offsetInVersion;
-            int len = fragments2[myidx].length;
-            int numApplications = fragments2[myidx].numApplications;
+            int len = selectedFragments[myidx].length;
+            int numApplications = selectedFragments[myidx].numApplications;
 
             // Iterate over the indexes in the current frag app
             for (int j = offsetInVersion; j < offsetInVersion + len; j++)
             {
-                // add_list looks like the output variable here
                 add_list[add_list_len].vid = i + base_frag;
                 add_list[add_list_len].pos = j - offsetInVersion;
                 add_list[add_list_len].wid = versions[version][j];
@@ -415,13 +415,12 @@ public:
             /*
                 TODO What does this code do? We're encoding something and then
                 putting it into a file called frag_%d.info (see the end of this function)
-
             */
 
             VBYTE_ENCODE(varbyteBufferPtr, len);            
             VBYTE_ENCODE(varbyteBufferPtr, numApplications);
 
-            for (auto it = fragments2[myidx].applications.begin(); it != fragments2[myidx].applications.end(); it++)
+            for (auto it = selectedFragments[myidx].applications.begin(); it != selectedFragments[myidx].applications.end(); it++)
             {
                 int a = (*it).vid + currid[docId];
                 int b = (*it).offsetInVersion;
@@ -429,7 +428,7 @@ public:
                 VBYTE_ENCODE(varbyteBufferPtr, b);
             }
 
-            fragments2[myidx].applications.clear();
+            selectedFragments[myidx].applications.clear();
         }
 
         // writing one int for each version, line delimited
@@ -468,16 +467,16 @@ public:
         for (int i = 0; i < numSelectedFrags; i++)
         {
             int myidx = selectedFragIndexes[i];
-            totalNumApplications += fragments2[myidx].applications.size();
-            totalNumPostings += fragments2[myidx].length;
+            totalNumApplications += selectedFragments[myidx].numApplications;
+            totalNumPostings += selectedFragments[myidx].length;
 
             // Each iteration of this loop processes a fragment application
             // TODO I have no idea what this is supposed to do, it looks like nonsense
-            // for (auto it = fragments2[myidx].applications.begin(); it != fragments2[myidx].applications.end(); it++)
+            // for (auto it = selectedFragments[myidx].applications.begin(); it != selectedFragments[myidx].applications.end(); it++)
             // {
             //     int version = it->vid;
             //     int off = it->offset;
-            //     int len = fragments2[myidx].length;
+            //     int len = selectedFragments[myidx].length;
             //     if (!it->isVoid)
             //     {
             //         for (int j = off; j < off + len; j++)
@@ -493,7 +492,7 @@ public:
             //         }
             //     }
             // }
-            // fragments2[myidx].applications.clear();
+            // selectedFragments[myidx].applications.clear();
         }
 
         tradeoffRecord->numDistinctFrags = numSelectedFrags;
@@ -519,12 +518,6 @@ public:
 
     void getRepairTrees()
     {
-        // if (versions.size() == 0)
-        // {
-        //     return 0;
-        // }
-
-        // Call doRepair on the instance of repairAlg in this class
         this->repairAlg.doRepair();
     }
 
@@ -555,6 +548,7 @@ public:
     {
         unsigned hh, lh;
         int fragIndex;
+        int startCurrentFrag;
         int endCurrentFrag;
 
         BaseFragmentsAllVersions baseFragmentsAllVersions;
@@ -579,27 +573,27 @@ public:
             // j iterates over all the base fragments
             for (int j = 0; j < baseFragmentsForVersion.size(); j++)
             {
+                startCurrentFrag = baseFragmentsForVersion.get(j).start;
+                endCurrentFrag = baseFragmentsForVersion.get(j).end;
+                
                 // k iterates over the current base fragment
-                for (int k = baseFragmentsForVersion.get(j).start; k < baseFragmentsForVersion.get(j).end; k++)
+                for (int k = startCurrentFrag; k < baseFragmentsForVersion.get(j).end; k++)
                 {
-                    md5_buf[k - baseFragmentsForVersion.get(j).start] = versions[v][k];
+                    md5_buf[k - startCurrentFrag] = versions[v][k];
                 }
 
-                endCurrentFrag = baseFragmentsForVersion.get(j).end;
-
                 md5_init(&state);
-                md5_append(&state, (const md5_byte_t *) md5_buf, sizeof(unsigned) * (endCurrentFrag - baseFragmentsForVersion.get(j).start));
+                md5_append(&state, (const md5_byte_t *) md5_buf, sizeof(unsigned) * (endCurrentFrag - startCurrentFrag));
                 md5_finish(&state, digest);
                 hh = *((unsigned *)digest) ;
                 lh = *((unsigned *)digest + 1) ;
                 fragIndex = lookupHash(lh, hh, h[0]);
 
-                // First time we've seen this fragment
-                if (fragIndex == -1)
+                if (fragIndex == -1) // First time we've seen this fragment
                 {
                     FragmentApplication p1;
                     p1.vid = v;
-                    p1.offsetInVersion = baseFragmentsForVersion.get(j).start;
+                    p1.offsetInVersion = startCurrentFrag;
                     p1.isVoid = false;
 
                     insertHash(lh, hh, fragments_count, h[0]);
@@ -610,16 +604,16 @@ public:
                     fptr.indexInFragArray = fragments_count;
                     fptr.indexInApplicationArray = fragments[fragments_count].numApplications;
 
-                    p1.nodeId = currentInvertedList->insert(fptr, baseFragmentsForVersion.get(j).start, endCurrentFrag);
+                    p1.nodeId = currentInvertedList->insert(fptr, startCurrentFrag, endCurrentFrag);
 
                     // what is nodeId?
                     if (p1.nodeId != -1)
                     {
-                        fragments[fragments_count].length = baseFragmentsForVersion.get(j).end - baseFragmentsForVersion.get(j).start;
+                        fragments[fragments_count].length = baseFragmentsForVersion.get(j).end - startCurrentFrag;
                         if (fragments[fragments_count].length < 0)
                         {
                             printf("Error... block number: %d, prev bound: %d, current bound: %d\n", j, 
-                                baseFragmentsForVersion.get(j).start, baseFragmentsForVersion.get(j).end);
+                                startCurrentFrag, baseFragmentsForVersion.get(j).end);
                             return -1;
                         }
                         fragments[fragments_count].applications.push_back(p1);
@@ -627,7 +621,6 @@ public:
                         fragments_count++;
                         if (fragments_count >= MAX_NUM_FRAGMENTS)
                         {
-                            // This error message sucks. fragments_count looks like the number of inverted lists
                             printf("Too many fragments!\n");
                             exit(0);
                         }
@@ -642,11 +635,11 @@ public:
                     
                     FragmentApplication p2;
                     p2.vid = v;
-                    p2.offsetInVersion = baseFragmentsForVersion.get(j).start;
+                    p2.offsetInVersion = startCurrentFrag;
                     p2.isVoid = false;
 
                     // Same as the call above, it will work once we set currentInvertedList properly (I sincerely hope -YK)
-                    p2.nodeId = currentInvertedList->insert(fptr, baseFragmentsForVersion.get(j).start, endCurrentFrag);
+                    p2.nodeId = currentInvertedList->insert(fptr, startCurrentFrag, endCurrentFrag);
 
                     if (p2.nodeId != -1)
                     {

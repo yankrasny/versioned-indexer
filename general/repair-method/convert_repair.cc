@@ -4,6 +4,8 @@ This is the global optimization using the tradeoff tables
 
 We decide on parameters for each document based on some constraints on meta data size
 
+TODO connect this to the paper
+
 */
 
 
@@ -64,7 +66,7 @@ int main(int argc, char** argv)
     for (int i = 0; i < atoi(argv[1]); i++)
     {
         memset(fn, 0, 256);
-        sprintf(fn, "test/meta-vs-index-tradeoff-%d", i);
+        sprintf(fn, "test/tradeoff-%d", i);
         FILE* f1 = fopen(fn, "r");
         if (!f1) {
             printf("skipping:%d...\n", i);    

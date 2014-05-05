@@ -30,10 +30,11 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<unsign
         
         partitionAlgorithm->init(versions);
 
-        // Make a copy to use after repair
+        // Make a copy to use after repair (TODO can we avoid duplicating the data like this?)
         auto versionsCopy = vector<vector<unsigned> >(versions);
 
-        // Do repair and save the result in some form so that trees can be built for partitioning
+        // Run the repair algorithm
+        // This produces a set of associations that can be used to build repair trees
         partitionAlgorithm->getRepairTrees();
 
         /*
@@ -46,10 +47,9 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<unsign
         vector<TradeoffRecord> TradeoffTable;
         TradeoffRecord tradeoffRecord;
         memset(fn, 0, 256);
-        sprintf(fn, "test/meta-vs-index-tradeoff-%d", docId);
+        sprintf(fn, "test/tradeoff-%d", docId);
         f = fopen(fn, "w");
 
-        float fragmentationCoefficient = 1.0;
         unsigned numLevelsDown;
         unsigned numBaseFrags;
         for (int i = 0; i < numLevelsDownArray.size(); i++)
@@ -127,8 +127,8 @@ int main(int argc, char**argv)
 
     auto numLevelsDownArray = vector<unsigned>();
     numLevelsDownArray.push_back(3);
+    numLevelsDownArray.push_back(4);
     numLevelsDownArray.push_back(5);
-    numLevelsDownArray.push_back(7);
 
     int numVersionsReadSoFar = 0;
 

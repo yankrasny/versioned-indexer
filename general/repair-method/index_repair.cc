@@ -15,37 +15,31 @@ using namespace std;
 
 indexer* myIndexer;
 GeneralPartitionAlgorithm* partitionAlgorithm;
-int dothejob(vector<vector<unsigned> >& versions, int docId, float wsize)
+int dothejob(vector<vector<unsigned> >& versions, int docId, unsigned numLevelsDown)
 {
     // TODO read your chosen variables
     // A good way to write this is to just hardcode some
     // Test the indexer, then write the code that reads params
 
     iv* invertedLists = new iv[versions.size()];
-    partitionAlgorithm->init();
+    partitionAlgorithm->init(versions);
 
-    unsigned numLevelsDown = 5;
-    float fragmentationCoefficient = 1.0;
-    float minFragSize = 100;
+    // Make a copy to use after repair
+    auto versionsCopy = vector<vector<unsigned> >(versions);
 
-    int numFrags = partitionAlgorithm->fragment(
-        versions,
-        invertedLists,
-        numLevelsDown, 
-        fragmentationCoefficient,
-        minFragSize);
+    // Do repair and save the result in some form so that trees can be built for partitioning
+    partitionAlgorithm->getRepairTrees();
     
-    // printf("Finished partitioning!\n");
-
-    // TOKEEP
-    partitionAlgorithm->addFragmentsToHeap(wsize);
-    partitionAlgorithm->selectGoodFragments(invertedLists, wsize);
+    unsigned numBaseFrags = partitionAlgorithm->getBaseFragments(invertedLists, versionsCopy, numLevelsDown);
+    partitionAlgorithm->addBaseFragmentsToHeap(numLevelsDown);
+    partitionAlgorithm->selectGoodFragments(invertedLists, numLevelsDown);
     partitionAlgorithm->populatePostings(versions, docId);
+
     for (int i = 0; i < partitionAlgorithm->add_list_len; i++)
     {
         // partitionAlgorithm->add_list is a posting*
         // wid is wordID
-        // pos is position (most likely)
+        // pos is position
         // vid is versionID, and we're using version IDs as doc IDs
         myIndexer->insert_term(partitionAlgorithm->add_list[i].wid, 
             partitionAlgorithm->add_list[i].pos, partitionAlgorithm->add_list[i].vid);
@@ -143,11 +137,23 @@ int main(int argc, char**argv)
         }
 
         // cerr << "Starting ID for Repair: " << currentWordID << endl;
+        // TODO get the chosen numLevelsDown param from the result of convert
+
+        unsigned numLevelsDown;
+        // The fread below is broken
+        // char fn[256];
+        // memset(fn, 0, 256);
+        // sprintf(fn, "test/convert-%d", i);
+        // FILE* fileWhichParam = fopen(fn, "r");
+        // fread(numLevelsDown, sizeof(unsigned), 1, fileWhichParam);
+
+        // TODO remove this to use the chosen one for each doc
+        numLevelsDown = 5;
 
         if (!skipThisDoc) {
             // Run our partitioning algorithm with several different param values
             // TODO change wsize to your params
-            fragmentCounts[i] = dothejob(versions, i, 5.0);
+            fragmentCounts[i] = dothejob(versions, i, numLevelsDown);
             cerr << "Document " << i << ": processed" << endl;
         } else {
             fragmentCounts[i] = 0;
