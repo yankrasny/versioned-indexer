@@ -8,9 +8,6 @@
 #ifndef HEAP_H_
 #define HEAP_H_
 
-
-#endif /* HEAP_H_ */
-
 typedef struct
 {
 	int ptr;
@@ -23,16 +20,16 @@ private:
 	int* key_pos;
 	hpost* Elements;
 	int Size;
-	void update_key(const hpost& X, int idx){
-		if ( idx > Size)
-		{
+	void update_key(const hpost& X, int idx) {
+		if (idx > Size) {
 			return;
 		}
+
 		int i = idx;
 		int Child;
 
-		if (X.score > Elements[idx].score ){
-			//move up
+		if (X.score > Elements[idx].score ) {
+			// move up
 			for (; Elements[i/2].score < X.score; i/=2){
 				key_pos[Elements[i/2].ptr] = i;
 				Elements[i] = Elements[i/2];
@@ -40,28 +37,27 @@ private:
 			}
 			key_pos[X.ptr] = i;
 			Elements[i] = X;
-		}
-
-		else if (X.score < Elements[idx].score )
-		{
-			//move down
-			for (; i*2 <= Size; i = Child ){
-					Child = i*2;
-					if ( Child != Size && Elements[Child].score < Elements[Child+1].score)
+		} else if (X.score < Elements[idx].score) {
+			// move down
+			for (; i * 2 <= Size; i = Child ){
+					Child = i * 2;
+					if (Child != Size && Elements[Child].score < Elements[Child+1].score) {
 						Child++;
-					if ( X.score < Elements[Child].score){
+					}
+					if (X.score < Elements[Child].score) {
 						int idx = Elements[Child].ptr;
 						key_pos[idx] = i;
 						Elements[i] = Elements[Child];
-					}
-					else
+					} else {
 						break;
+					}
 
 			}
 			key_pos[X.ptr] = i;
 			Elements[i] = X;
 		}
 	}
+
 public:
 	void init(int maxNum)
 	{
@@ -92,9 +88,16 @@ public:
 	{
 		return Size == 0;
 	}
+
+	void clearStructures()
+	{
+		delete [] this->key_pos;
+		delete [] this->Elements;
+	}
+	
 	~heap()
 	{
-
+		// clearStructures();
 	}
 
 	int size()
@@ -112,14 +115,15 @@ public:
 			key_pos[idx] = i;
 			Elements[i] = Elements[i/2];
 		}
-	    Elements[ i ] = p;
+	    Elements[i] = p;
 		id = p.ptr;
 		key_pos[id] = i;
 	}
 
 	void pop()
 	{
-		int i, Child;
+		int i;
+		int Child;
 		int id;
 
 		if (IsEmpty()) {
@@ -129,30 +133,32 @@ public:
 		id = Elements[1].ptr;
 		key_pos[id] = -1;
 		hpost& LastElement = Elements[Size--];
+		
 		for (i = 1; i * 2 <= Size; i = Child) {
 			Child = i * 2;
 
-			if ( Child != Size && Elements[Child].score < Elements[Child+1].score)
+			if (Child != Size && Elements[Child].score < Elements[Child+1].score) {
 				Child++;
-			if ( Elements[Child].score > LastElement.score) {
+			}
+			
+			if (Elements[Child].score > LastElement.score) {
 				Elements[ i ] = Elements[ Child ];
 				id = Elements[i].ptr;
 				key_pos[id] = i;
-			}
-			else
+			} else {
 				break;
+			}
 		}
 
-		Elements[ i ] = LastElement;
+		Elements[i] = LastElement;
 		id = Elements[i].ptr;
 		key_pos[id] = i;
-		return;
 	}
 
 	void UpdateKey(int key, double value)
 	{
 		int idx = key_pos[key];
-		if ( idx != -1){
+		if (idx != -1) {
 			hpost p;
 			p.ptr = key;
 			p.score = value;
@@ -162,7 +168,7 @@ public:
 
 	void deleteKey(int key)
 	{
-		double score = Elements[1].score+1;
+		double score = Elements[1].score + 1;
 		UpdateKey(key, score);
 		pop();
 	}
@@ -172,3 +178,5 @@ public:
 		return Elements[1];
 	}
 };
+
+#endif /* HEAP_H_ */

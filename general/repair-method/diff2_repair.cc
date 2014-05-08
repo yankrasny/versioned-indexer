@@ -52,6 +52,7 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<unsign
 
         unsigned numLevelsDown;
         unsigned numBaseFrags;
+        // TODO clear all the data structures at end of each iteration
         for (int i = 0; i < numLevelsDownArray.size(); i++)
         {
             numLevelsDown = numLevelsDownArray[i];
@@ -96,6 +97,9 @@ unsigned currentOffset = 0;
 
 int main(int argc, char**argv)
 {
+    clock_t init, final;
+    init = clock();
+
     partitionAlgorithm = new GeneralPartitionAlgorithm();
     
     // Doc Sizes means number of versions in each doc
@@ -118,17 +122,12 @@ int main(int argc, char**argv)
     int* versionSizes = new int[totalNumVersions]; // versionSizes[i] is the length of version i (the number of word Ids)
     fread(versionSizes, sizeof(unsigned), totalNumVersions, fileWikiVersionSizes);
 
-    // TODO use a similar approach (have different values in a text file) with your variables
-    // ifstream fin("../options");
-    // istream_iterator<double> data_begin(fin);
-    // istream_iterator<double> data_end;
-    // vector<double> wsizes2(data_begin, data_end);
-    // fin.close();
-
-    auto numLevelsDownArray = vector<unsigned>();
-    numLevelsDownArray.push_back(3);
-    numLevelsDownArray.push_back(4);
-    numLevelsDownArray.push_back(5);
+    // The file contains one unsigned per line
+    ifstream fin("paramList.txt");
+    istream_iterator<unsigned> data_begin(fin);
+    istream_iterator<unsigned> data_end;
+    vector<unsigned> numLevelsDownArray(data_begin, data_end);
+    fin.close();
 
     int numVersionsReadSoFar = 0;
 
@@ -213,6 +212,15 @@ int main(int argc, char**argv)
 
     FILE* successFile = fopen("SUCCESS PARAM SELECTION!", "w");
     fclose(successFile);
+
+    final = clock() - init;
+
+    double timeInSeconds = (double)final / ((double)CLOCKS_PER_SEC);
+    int totalDocsProcessed = docCount - numSkipped;
+    double docsPerSecond = (double)totalDocsProcessed / timeInSeconds;
+
+    cerr << "Total time: " << timeInSeconds << endl;
+    cerr << "Docs per second: " << docsPerSecond << endl;
 
     delete partitionAlgorithm;
     return 0;

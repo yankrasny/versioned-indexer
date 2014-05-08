@@ -150,45 +150,28 @@ public:
     
 
     /*
-        TODO remove the params you aren't using
         Make sure the allocations here and in init() make sense
             What I mean is, each document needs to do repair again, so
             Does repair clean up after itself properly? Is it enough to just call the constructor again like we do in init()?       
-
     */
-    GeneralPartitionAlgorithm(
-        int para = 0,
-        int maxblock = 0,
-        int blayer = 0,
-        int pTotal = 0)
-        :
-        myheap(MAX_NUM_FRAGMENTS)
+    GeneralPartitionAlgorithm() : myheap(MAX_NUM_FRAGMENTS)
     {
-        selectedFragIndexes = new unsigned[MAX_NUM_FRAGMENTS];
-        fbuf = new FragIndexes[5000000];
-        varbyteBuffer = new unsigned char[50000000];
-        md5_buf = new unsigned[5000000];
-        add_list = new posting[1000000];
-
-        // TODO 99% sure this should be called candidateFragments
-        fragments = new FragmentInfo[5000000];
-        
-        // TODO and I think this should be called selectedFragments
-        selectedFragments = new FragmentInfo[5000000];
-        flens = new unsigned[5000000];
-        
-        fID = 0;
-        base_frag = 0;
-        char fn[256];
-        sprintf(fn, "frag_%d.info", para);
-        ffrag = fopen(fn, "wb");
-        memset(fn, 0, 256);
-        sprintf(fn, "base_frag_%d", para);
-        fbase_frag = fopen(fn, "w");
-        load_global();
+        this->initAllStructures();
     }
 
     ~GeneralPartitionAlgorithm()
+    {
+        this->clearAllStructures();
+    }
+
+    void resetBeforeNextRun()
+    {
+        this->myheap.clearStructures();
+        this->clearAllStructures();
+        this->initAllStructures();
+    }
+
+    void clearAllStructures()
     {
         delete [] selectedFragIndexes;
         delete [] fbuf;
@@ -203,7 +186,31 @@ public:
         fclose(fbase_frag);
     }
 
+    void initAllStructures()
+    {
+        myheap = heap(MAX_NUM_FRAGMENTS);
 
+        selectedFragIndexes = new unsigned[MAX_NUM_FRAGMENTS];
+        fbuf = new FragIndexes[5000000];
+        varbyteBuffer = new unsigned char[50000000];
+        md5_buf = new unsigned[5000000];
+        add_list = new posting[1000000];
+        fragments = new FragmentInfo[5000000];
+        selectedFragments = new FragmentInfo[5000000];
+        flens = new unsigned[5000000];
+        
+        fID = 0;
+        base_frag = 0;
+        char fn[256];
+        sprintf(fn, "frag_0.info");
+        ffrag = fopen(fn, "wb");
+        memset(fn, 0, 256);
+        sprintf(fn, "base_frag_0");
+        fbase_frag = fopen(fn, "w");
+        load_global();
+    }
+
+    // Hmmm, a previous attempt at clearing structures between consecutive runs?
     int dump_frag()
     {
         for (int i = 0; i < fragments_count; i++)
@@ -215,7 +222,7 @@ public:
         return 0;
     }
 
-
+    // TODO put this code somewhere using your new organization with ctor, dtor, etc.
     int init(vector<vector<unsigned> >& versions)
     {
         this->repairAlg = RepairAlgorithm(versions);
@@ -309,7 +316,7 @@ public:
     {
         numSelectedFrags = 0;
         hpost heapEntry;
-        while (myheap.size() > 0)
+        while (!myheap.IsEmpty())
         {
             heapEntry = myheap.top();
             selectedFragIndexes[numSelectedFrags++] = heapEntry.ptr;
@@ -563,21 +570,22 @@ public:
         unsigned v;
         for (auto it = baseFragmentsAllVersions.begin(); it != baseFragmentsAllVersions.end(); ++it) {
 
-            baseFragmentsForVersion = (*it);
-
-            v = baseFragmentsForVersion.getVersionNum();
+            auto baseFragObj = (*it);
+            auto baseFragmentsForVersion = baseFragObj.getBaseFragments();
+            v = baseFragObj.getVersionNum();
 
             // TODO rename this? I think it's not an inverted list
             iv* currentInvertedList = &invertedLists[v];
 
+            unsigned j = 0;
             // j iterates over all the base fragments
-            for (int j = 0; j < baseFragmentsForVersion.size(); j++)
+            for (auto it2 = baseFragmentsForVersion.begin(); it2 != baseFragmentsForVersion.end(); ++it2)
             {
-                startCurrentFrag = baseFragmentsForVersion.get(j).start;
-                endCurrentFrag = baseFragmentsForVersion.get(j).end;
+                startCurrentFrag = (*it2).start;
+                endCurrentFrag = (*it2).end;
                 
                 // k iterates over the current base fragment
-                for (int k = startCurrentFrag; k < baseFragmentsForVersion.get(j).end; k++)
+                for (int k = startCurrentFrag; k < endCurrentFrag; k++)
                 {
                     md5_buf[k - startCurrentFrag] = versions[v][k];
                 }
@@ -609,11 +617,11 @@ public:
                     // what is nodeId?
                     if (p1.nodeId != -1)
                     {
-                        fragments[fragments_count].length = baseFragmentsForVersion.get(j).end - startCurrentFrag;
+                        fragments[fragments_count].length = endCurrentFrag - startCurrentFrag;
                         if (fragments[fragments_count].length < 0)
                         {
                             printf("Error... block number: %d, prev bound: %d, current bound: %d\n", j, 
-                                startCurrentFrag, baseFragmentsForVersion.get(j).end);
+                                startCurrentFrag, endCurrentFrag);
                             return -1;
                         }
                         fragments[fragments_count].applications.push_back(p1);
@@ -647,6 +655,7 @@ public:
                         fragments[fragIndex].numApplications++;
                     }
                 }
+                ++j;
             }
             currentInvertedList->complete();
         }
