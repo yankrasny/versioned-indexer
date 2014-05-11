@@ -109,20 +109,11 @@ private:
         fread(maxid, sizeof(unsigned), size, f);
         fclose(f);
 
-        // unsigned overallMax = 0;
-
         currid[0] = 0;
         for (int i = 1; i < size; ++i)
         {
-            // if (maxid[i] > overallMax) {
-            //     overallMax = maxid[i];
-            // }
             currid[i] = currid[i-1] + maxid[i-1];
         }
-
-        // cerr << overallMax << endl;
-        // exit(1);
-
     }
 
 public:
@@ -133,7 +124,7 @@ public:
     
     FragIndexes* fbuf; // TODO what is a FragIndexes?
     unsigned char* varbyteBuffer;
-    unsigned* md5_buf; // TODO
+    unsigned* md5_buf;
     posting* add_list;
 
     FragmentInfo* fragments; // an array of FragmentInfo, I think this is the general fragment pool
@@ -141,7 +132,6 @@ public:
 
     FragmentInfo* selectedFragments; // an array of FragmentInfo, I think this is a subset of fragments (really uncertain about that)
 
-    
     int block_info_ptr;
     int add_list_len;
     unsigned* flens;
@@ -156,22 +146,29 @@ public:
     */
     GeneralPartitionAlgorithm() : myheap(MAX_NUM_FRAGMENTS)
     {
-        this->initAllStructures();
+        this->resetCounts();
+
+        char fn[256];
+        sprintf(fn, "frag_0.info");
+        ffrag = fopen(fn, "wb");
+        
+        memset(fn, 0, 256);
+        
+        sprintf(fn, "base_frag_0");
+        fbase_frag = fopen(fn, "w");
+        load_global();
+
+        selectedFragIndexes = new unsigned[MAX_NUM_FRAGMENTS];
+        fbuf = new FragIndexes[5000000];
+        varbyteBuffer = new unsigned char[50000000];
+        md5_buf = new unsigned[5000000];
+        add_list = new posting[1000000];
+        fragments = new FragmentInfo[5000000];
+        selectedFragments = new FragmentInfo[5000000];
+        flens = new unsigned[5000000];
     }
 
     ~GeneralPartitionAlgorithm()
-    {
-        this->clearAllStructures();
-    }
-
-    void resetBeforeNextRun()
-    {
-        this->myheap.clearStructures();
-        this->clearAllStructures();
-        this->initAllStructures();
-    }
-
-    void clearAllStructures()
     {
         delete [] selectedFragIndexes;
         delete [] fbuf;
@@ -186,52 +183,39 @@ public:
         fclose(fbase_frag);
     }
 
-    void initAllStructures()
+    void resetBeforeNextRun()
     {
-        myheap = heap(MAX_NUM_FRAGMENTS);
-
-        selectedFragIndexes = new unsigned[MAX_NUM_FRAGMENTS];
-        fbuf = new FragIndexes[5000000];
-        varbyteBuffer = new unsigned char[50000000];
-        md5_buf = new unsigned[5000000];
-        add_list = new posting[1000000];
-        fragments = new FragmentInfo[5000000];
-        selectedFragments = new FragmentInfo[5000000];
-        flens = new unsigned[5000000];
-        
-        fID = 0;
-        base_frag = 0;
-        char fn[256];
-        sprintf(fn, "frag_0.info");
-        ffrag = fopen(fn, "wb");
-        memset(fn, 0, 256);
-        sprintf(fn, "base_frag_0");
-        fbase_frag = fopen(fn, "w");
-        load_global();
+        this->clearFrags();
+        // this->resetCounts();
     }
 
-    // Hmmm, a previous attempt at clearing structures between consecutive runs?
-    int dump_frag()
+    void clearFrags()
     {
         for (int i = 0; i < fragments_count; i++)
         {
             fragments[i].numApplications = 0;
             fragments[i].applications.clear();
         }
-        fragments_count = 0;
-        return 0;
     }
 
-    // TODO put this code somewhere using your new organization with ctor, dtor, etc.
-    int init(vector<vector<unsigned> >& versions)
+    void resetCounts()
     {
-        this->repairAlg = RepairAlgorithm(versions);
-
+        base_frag = 0;
         add_list_len = 0;
         flens_count = 0;
         block_info_ptr = 0;
         fragments_count = 0;
         fID = 0;
+    }
+
+    void initRepair(vector<vector<unsigned> >& versions)
+    {
+        this->repairAlg = RepairAlgorithm(versions);
+    }
+
+    int init()
+    {
+        this->resetCounts();
 
         if (h[0] != NULL)
         {
@@ -346,6 +330,10 @@ public:
                 Handle fragment conflicts here
                 If the current frag application conflicts with other frags
                     then go through them and update scores and other vars for the fragments involved
+
+                My guesses for var names:
+                    cptr is numConflicts
+                    fbuf contains conflicting fragment applications
             */
             if (cptr > 0)
             {

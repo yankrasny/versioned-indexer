@@ -26,9 +26,9 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<unsign
         sprintf(fn, "/research/run/jhe/proximity/model/test/%d", docId);
         FILE* f = fopen(fn, "r");
 
-        iv* invertedLists = new iv[versions.size()];
+        // iv* invertedLists = new iv[versions.size()];
         
-        partitionAlgorithm->init(versions);
+        partitionAlgorithm->initRepair(versions);
 
         // Make a copy to use after repair (TODO can we avoid duplicating the data like this?)
         auto versionsCopy = vector<vector<unsigned> >(versions);
@@ -41,7 +41,8 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<unsign
             Build the tradeoff table for each document
             The tradeoff is between meta data size and index size
             The more fragments we have, the more meta data
-            We also write down how many index postings will be generated for a partitioning
+            The more "good" fragments we identify, the less redundant postings
+            So write down how many index postings will be generated for a partitioning
             The global index optimization will use these figures to choose a good param value for each doc
         */
         vector<TradeoffRecord> TradeoffTable;
@@ -55,6 +56,10 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<unsign
         // TODO clear all the data structures at end of each iteration
         for (int i = 0; i < numLevelsDownArray.size(); i++)
         {
+            iv* invertedLists = new iv[versions.size()];
+
+            partitionAlgorithm->init();
+            
             numLevelsDown = numLevelsDownArray[i];
 
             numBaseFrags = partitionAlgorithm->getBaseFragments(invertedLists, versionsCopy, numLevelsDown);
@@ -69,11 +74,13 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<unsign
             TradeoffTable.push_back(tradeoffRecord);
             fprintf(f, "%d\t%d\t%d\t%d\n", numLevelsDown, tradeoffRecord.numDistinctFrags, 
                 tradeoffRecord.numFragApplications, tradeoffRecord.numPostings);
+
+            partitionAlgorithm->resetBeforeNextRun();
+
+            delete [] invertedLists;
         }
         fclose(f);
 
-        partitionAlgorithm->dump_frag();
-        delete [] invertedLists;
 
         return numBaseFrags;
     }
