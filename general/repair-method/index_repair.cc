@@ -17,18 +17,16 @@ indexer* myIndexer;
 GeneralPartitionAlgorithm* partitionAlgorithm;
 int dothejob(vector<vector<unsigned> >& versions, int docId, unsigned numLevelsDown)
 {
-    // TODO read your chosen variables
-    // A good way to write this is to just hardcode some
-    // Test the indexer, then write the code that reads params
-
     iv* invertedLists = new iv[versions.size()];
-    partitionAlgorithm->init(versions);
+    partitionAlgorithm->initRepair(versions);
 
     // Make a copy to use after repair
     auto versionsCopy = vector<vector<unsigned> >(versions);
 
     // Do repair and save the result in some form so that trees can be built for partitioning
     partitionAlgorithm->getRepairTrees();
+
+    partitionAlgorithm->init();    
     
     unsigned numBaseFrags = partitionAlgorithm->getBaseFragments(invertedLists, versionsCopy, numLevelsDown);
     partitionAlgorithm->addBaseFragmentsToHeap(numLevelsDown);
@@ -41,8 +39,10 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, unsigned numLevelsD
         // wid is wordID
         // pos is position
         // vid is versionID, and we're using version IDs as doc IDs
-        myIndexer->insert_term(partitionAlgorithm->add_list[i].wid, 
-            partitionAlgorithm->add_list[i].pos, partitionAlgorithm->add_list[i].vid);
+        myIndexer->insert_term(
+            partitionAlgorithm->add_list[i].wid, 
+            partitionAlgorithm->add_list[i].pos,
+            partitionAlgorithm->add_list[i].vid);
     }
     
     delete [] invertedLists;
@@ -103,7 +103,7 @@ int main(int argc, char**argv)
     myIndexer = new indexer(maxTuplesPerBlock, typeLabel, sizeLabel);
 
     // In this loop, i is the docId
-    for (size_t i = 0; i < docCount; ++i) // for each document -YK
+    for (int i = 0; i < docCount; ++i) // for each document -YK
     {
         totalWordsInDoc = 0;
         totalWordsInVersion = 0;
@@ -136,23 +136,24 @@ int main(int argc, char**argv)
             ++currentWordID;
         }
 
-        // cerr << "Starting ID for Repair: " << currentWordID << endl;
-        // TODO get the chosen numLevelsDown param from the result of convert
-
-        unsigned numLevelsDown;
-        // The fread below is broken
-        // char fn[256];
-        // memset(fn, 0, 256);
-        // sprintf(fn, "test/convert-%d", i);
-        // FILE* fileWhichParam = fopen(fn, "r");
-        // fread(numLevelsDown, sizeof(unsigned), 1, fileWhichParam);
-
-        // TODO remove this to use the chosen one for each doc
-        numLevelsDown = 5;
-
         if (!skipThisDoc) {
-            // Run our partitioning algorithm with several different param values
-            // TODO change wsize to your params
+            
+            // Run our partitioning algorithm with the chosen param value
+            unsigned numLevelsDown = 0;
+            char fn[256];
+            memset(fn, 0, 256);
+            sprintf(fn, "test/convert-%d", i);
+            FILE* currFile = fopen(fn, "r");
+            if (!currFile) {
+                printf("skipping:%d...\n", i);
+                continue;
+            }
+
+            if (fscanf(currFile, "%d", &numLevelsDown) == 0) {
+                printf("Bad input, skipping:%d...\n", i);
+                continue;
+            }
+
             fragmentCounts[i] = dothejob(versions, i, numLevelsDown);
             cerr << "Document " << i << ": processed" << endl;
         } else {

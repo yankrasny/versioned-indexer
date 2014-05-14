@@ -33,7 +33,7 @@ struct TradeoffRecord
     int numFragApplications; // number of fragment applications
     int numDistinctFrags; // number of distinct fragments
     int numPostings; // total number of postings
-    double numLevelsDown; // number of levels we traverse in the repair tree (more = possibly smaller fragments)
+    unsigned paramValue; // number of levels we traverse in the repair tree (more = possibly smaller fragments)
 };
 
 struct FragmentApplication
@@ -196,6 +196,8 @@ public:
             fragments[i].numApplications = 0;
             fragments[i].applications.clear();
         }
+
+        // TODO selectedFragments?
     }
 
     void resetCounts()
@@ -244,7 +246,7 @@ public:
         The heap entries have score and ptr, which I think means indexInHeap
 
     */
-    void addBaseFragmentsToHeap(unsigned numLevelsDown)
+    void addBaseFragmentsToHeap(double x)
     {
         myheap.init();
         for (int i = 0; i < fragments_count; i++)
@@ -259,7 +261,15 @@ public:
                 it->isVoid = false;
             }
 
-            fragments[i].score = static_cast<double>(fragments[i].length * fragments[i].numApplications) / (1 + fragments[i].length + (1 / numLevelsDown) * (1 + fragments[i].numApplications)); 
+            double fragLength = static_cast<double>(fragments[i].length);
+            double numFragApps = static_cast<double>(fragments[i].numApplications);
+            double coverage = fragLength * numFragApps;
+            double indexCost = 1.0;
+            double z = 1.0;
+            double metaCost = 1.0 + z * numFragApps;
+
+            fragments[i].score = coverage / (indexCost + x * metaCost);
+
             hpost heapEntry;
             heapEntry.ptr = i;
             heapEntry.score = fragments[i].score;
@@ -296,7 +306,7 @@ public:
         Using the heap of fragments, select the best ones and add them to selectedFragIndexes
     */
     int numSelectedFrags;
-    void selectGoodFragments(iv* currentInvertedList, unsigned numLevelsDown)
+    void selectGoodFragments(iv* currentInvertedList, double x)
     {
         numSelectedFrags = 0;
         hpost heapEntry;
@@ -347,7 +357,15 @@ public:
                         int idx2 = fbuf[i-1].indexInFragArray;
                         if (fragments[idx2].numApplications > 0)
                         {
-                            fragments[idx2].score = fragments[idx2].length * fragments[idx2].numApplications / (1 + fragments[idx2].length + (1 / numLevelsDown) * (1 + fragments[idx2].numApplications));
+                            double fragLength = static_cast<double>(fragments[idx2].length);
+                            double numFragApps = static_cast<double>(fragments[idx2].numApplications);
+                            double coverage = fragLength * numFragApps;
+                            double indexCost = 1.0;
+                            double z = 1.0;
+                            double metaCost = 1.0 + z * numFragApps;
+
+                            fragments[idx2].score = coverage / (indexCost + x * metaCost);
+
                             myheap.UpdateKey(idx2, fragments[idx2].score);
                         }
                     }
@@ -356,14 +374,24 @@ public:
                         fragments[idx].numApplications--;
                         fragments[idx].applications.at(fbuf[i].indexInApplicationArray).isVoid = true;
                         if (fragments[idx].numApplications == 0)
+                        {
                             myheap.deleteKey(idx);
+                        }
                     }
                 }
 
                 idx = fbuf[cptr - 1].indexInFragArray;
                 if (fragments[idx].numApplications > 0)
                 {
-                    fragments[idx].score = fragments[idx].length * fragments[idx].numApplications / (1 + fragments[idx].length + (1 / numLevelsDown) * (1 + fragments[idx].numApplications));
+                    double fragLength = static_cast<double>(fragments[idx].length);
+                    double numFragApps = static_cast<double>(fragments[idx].numApplications);
+                    double coverage = fragLength * numFragApps;
+                    double indexCost = 1.0;
+                    double z = 1.0;
+                    double metaCost = 1.0 + z * numFragApps;
+
+                    fragments[idx].score = coverage / (indexCost + x * metaCost);
+
                     myheap.UpdateKey(idx, fragments[idx].score);
                 }
             }
@@ -439,7 +467,7 @@ public:
         // ok, now we're writing the varbyte encoded stuff somewhere, might be important
         fwrite(varbyteBuffer, sizeof(unsigned char), varbyteBufferPtr - varbyteBuffer, ffrag);
 
-        // clear the vector<p> in each fragment
+        // clear the vector of applications for each fragment
         for (int i = 0; i < fragments_count; i++)
         {
             fragments[i].numApplications = 0;
@@ -448,7 +476,6 @@ public:
     }
 
     /*
-        I think this function populates one TradeoffRecord
         This function populates the Tradeoff Table (between meta data size and index size)
         Check diff2_repair for the definition of TradeoffRecord
     */
@@ -466,7 +493,7 @@ public:
             totalNumPostings += selectedFragments[myidx].length;
 
             // Each iteration of this loop processes a fragment application
-            // TODO I have no idea what this is supposed to do, it looks like nonsense
+            // TODO I have no idea what this is supposed to do, it looks like some kind of error checking but mostly nonsense
             // for (auto it = selectedFragments[myidx].applications.begin(); it != selectedFragments[myidx].applications.end(); it++)
             // {
             //     int version = it->vid;
@@ -487,7 +514,7 @@ public:
             //         }
             //     }
             // }
-            // selectedFragments[myidx].applications.clear();
+            selectedFragments[myidx].applications.clear();
         }
 
         tradeoffRecord->numDistinctFrags = numSelectedFrags;
@@ -536,8 +563,8 @@ public:
         1) Partition the repair trees and get base fragments
         2) Add unique fragments to a list (will add to heap in another function)
       
-        Note: This gets called a few times with different values of numLevelsDown
-        The higher the value of numLevelsDown, the more fragments we generate
+        Note: This gets called a few times with different values of paramValue
+        The higher the value of paramValue, the more fragments we generate
     */
     int getBaseFragments(iv* invertedLists, const vector<vector<unsigned> >& versions, unsigned numLevelsDown)
     {

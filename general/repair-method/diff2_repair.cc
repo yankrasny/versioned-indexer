@@ -17,14 +17,14 @@
 using namespace std;
 
 GeneralPartitionAlgorithm* partitionAlgorithm;
-int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<unsigned>& numLevelsDownArray)
+int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double>& paramArray)
 {
     char fn[256];
     if (versions.size() != 1)
     {
-        memset(fn, 0, 256);
-        sprintf(fn, "/research/run/jhe/proximity/model/test/%d", docId);
-        FILE* f = fopen(fn, "r");
+        // memset(fn, 0, 256);
+        // sprintf(fn, "/research/run/jhe/proximity/model/test/%d", docId);
+        // FILE* f = fopen(fn, "r");
 
         // iv* invertedLists = new iv[versions.size()];
         
@@ -49,38 +49,43 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<unsign
         TradeoffRecord tradeoffRecord;
         memset(fn, 0, 256);
         sprintf(fn, "test/tradeoff-%d", docId);
-        f = fopen(fn, "w");
+        FILE* f = fopen(fn, "w");
 
-        unsigned numLevelsDown;
+        double paramValue;
         unsigned numBaseFrags;
-        // TODO clear all the data structures at end of each iteration
-        for (int i = 0; i < numLevelsDownArray.size(); i++)
+        unsigned numLevelsDown = 10;
+        
+        // Remember to clear all the data structures at end of each iteration
+        // I did this but it took a lot of debugging, be careful -YK
+        for (int i = 0; i < paramArray.size(); i++)
         {
             iv* invertedLists = new iv[versions.size()];
 
             partitionAlgorithm->init();
             
-            numLevelsDown = numLevelsDownArray[i];
+            paramValue = paramArray[i];
 
             numBaseFrags = partitionAlgorithm->getBaseFragments(invertedLists, versionsCopy, numLevelsDown);
 
-            partitionAlgorithm->addBaseFragmentsToHeap(numLevelsDown);
+            partitionAlgorithm->addBaseFragmentsToHeap(paramValue);
 
-            partitionAlgorithm->selectGoodFragments(invertedLists, numLevelsDown);
+            partitionAlgorithm->selectGoodFragments(invertedLists, paramValue);
             
             partitionAlgorithm->writeTradeoffRecord(versionsCopy, docId, &tradeoffRecord);
 
-            tradeoffRecord.numLevelsDown = numLevelsDown;
+            tradeoffRecord.paramValue = paramValue;
             TradeoffTable.push_back(tradeoffRecord);
-            fprintf(f, "%d\t%d\t%d\t%d\n", numLevelsDown, tradeoffRecord.numDistinctFrags, 
-                tradeoffRecord.numFragApplications, tradeoffRecord.numPostings);
+            fprintf(f, "%.2f\t%d\t%d\t%d\n",
+                paramValue,
+                tradeoffRecord.numDistinctFrags,
+                tradeoffRecord.numFragApplications,
+                tradeoffRecord.numPostings);
 
             partitionAlgorithm->resetBeforeNextRun();
 
             delete [] invertedLists;
         }
         fclose(f);
-
 
         return numBaseFrags;
     }
@@ -89,8 +94,7 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<unsign
         memset(fn, 0, 256);
         sprintf(fn, "test/%d.2", docId);
         FILE* f = fopen(fn, "w");
-        // TODO is numLevelsDown the right thing to put there?
-        fprintf(f, "%d\t%d\t%d\t%d\n", 0, 1, 1, (unsigned) versions[0].size());
+        fprintf(f, "%f\t%d\t%d\t%d\n", 0.0, 1, 1, (unsigned) versions[0].size());
         fclose(f);
         return 1;
     }
@@ -131,9 +135,9 @@ int main(int argc, char**argv)
 
     // The file contains one unsigned per line
     ifstream fin("paramList.txt");
-    istream_iterator<unsigned> data_begin(fin);
-    istream_iterator<unsigned> data_end;
-    vector<unsigned> numLevelsDownArray(data_begin, data_end);
+    istream_iterator<double> data_begin(fin);
+    istream_iterator<double> data_end;
+    vector<double> paramArray(data_begin, data_end);
     fin.close();
 
     int numVersionsReadSoFar = 0;
@@ -166,8 +170,7 @@ int main(int argc, char**argv)
         {
             totalWordsInVersion = versionSizes[numVersionsReadSoFar + v];
             totalWordsInDoc += totalWordsInVersion;
-            if (totalWordsInDoc > MAX_NUM_WORDS_PER_DOC)
-            {
+            if (totalWordsInDoc > MAX_NUM_WORDS_PER_DOC) {
                 skipThisDoc = true;
             } else {
                 skipThisDoc = false;
@@ -191,7 +194,7 @@ int main(int argc, char**argv)
 
         if (!skipThisDoc) {
             // Run our partitioning algorithm with several different param values
-            fragmentCounts[i] = dothejob(versions, i, numLevelsDownArray);
+            fragmentCounts[i] = dothejob(versions, i, paramArray);
             cerr << "Document " << i << ": processed" << endl;
         } else {
             fragmentCounts[i] = 0;

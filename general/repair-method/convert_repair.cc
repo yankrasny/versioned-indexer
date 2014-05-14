@@ -4,11 +4,7 @@ This is the global optimization using the tradeoff tables
 
 We decide on parameters for each document based on some constraints on meta data size
 
-TODO connect this to the paper
-
 */
-
-
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,21 +12,22 @@ TODO connect this to the paper
 
 #define NUM_DOCS 240179
 
-typedef struct
+// This is a row in the tradeoff table (metadata vs index size)
+struct TradeoffRecord
 {
-    int total;
-    int numDistinctFrags;
-    int numPostings;
-    float wsize;
-} linfo;
+    int numFragApplications; // number of fragment applications
+    int numDistinctFrags; // number of distinct fragments
+    int numPostings; // total number of postings
+    unsigned numLevelsDown; // number of levels we traverse in the repair tree (more = possibly smaller fragments)
+};
 
 int comparep(const void* a1, const void* a2)
 {
-    linfo* l1 = (linfo*)a1;
-    linfo* l2 = (linfo*)a2;
+    TradeoffRecord* t1 = (TradeoffRecord*)a1;
+    TradeoffRecord* t2 = (TradeoffRecord*)a2;
 
-    int ret =  l1->numPostings - l2->numPostings;
-    int ret2 = l1->total - l2->total;
+    int ret =  t1->numPostings - t2->numPostings;
+    int ret2 = t1->numFragApplications - t2->numFragApplications;
 
     if (ret2 == 0)
         return ret;
@@ -40,79 +37,117 @@ int comparep(const void* a1, const void* a2)
 
 int main(int argc, char** argv)
 {
-    linfo* lbuf = new linfo[NUM_DOCS];
+    TradeoffRecord* tradeoffs = new TradeoffRecord[NUM_DOCS];
+    
     int ptr = 0;
     unsigned* lens = new unsigned[NUM_DOCS];
     memset(lens, 0, NUM_DOCS * sizeof(unsigned));
+    
     char fn[256];
     memset(fn, 0, 256);
+    
     FILE* f2 = fopen("finfos", "wb");
-    FILE* f3 = fopen("/data/jhe/wiki_access/numv", "rb");
-    int size;
-    fread(&size, sizeof(unsigned), 1, f3);
-    unsigned* lens2 = new unsigned[size];
-    fread(lens2, sizeof(unsigned), size, f3);
-    fclose(f3);
+    
+    FILE* fileWikiDocSizes = fopen("/data/jhe/wiki_access/numv", "rb");
 
-    FILE* f4 = fopen("/data/jhe/wiki_access/word_size", "rb");
-    unsigned wlens;
-    fread(&wlens, sizeof(unsigned), 1, f4);
-    unsigned* dlens = new unsigned[wlens];
-    fread(dlens, sizeof(unsigned), wlens, f4);
-    fclose(f4);
-    int wsize = 0;
+
+    int docCount;
+    fread(&docCount, sizeof(unsigned), 1, fileWikiDocSizes);
+
+    unsigned* versionsPerDoc = new unsigned[docCount]; // number of versions for each document
+    fread(versionsPerDoc, sizeof(unsigned), docCount, fileWikiDocSizes);
+
+    fclose(fileWikiDocSizes);
+
+
+
+    FILE* fileWikiVersionSizes = fopen("/data/jhe/wiki_access/word_size", "rb");
+    unsigned totalNumVersions;
+    fread(&totalNumVersions, sizeof(unsigned), 1, fileWikiVersionSizes);
+
+    // versionSizes[i] is the length of version i (the number of word Ids)
+    unsigned* versionSizes = new unsigned[totalNumVersions];
+    fread(versionSizes, sizeof(unsigned), totalNumVersions, fileWikiVersionSizes);
+    fclose(fileWikiVersionSizes);
+    
+
+    if (argc > 1)
+    {
+        // use this to test a small number of docs
+        docCount = atoi(argv[1]);
+    }
+    unsigned numLevelsDown = 0;
     FILE* fexcept = fopen("except", "w");
-
-    for (int i = 0; i < atoi(argv[1]); i++)
+    for (int i = 0; i < docCount; i++)
     {
         memset(fn, 0, 256);
         sprintf(fn, "test/tradeoff-%d", i);
-        FILE* f1 = fopen(fn, "r");
-        if (!f1) {
+        FILE* currFile = fopen(fn, "r");
+        if (!currFile) {
             printf("skipping:%d...\n", i);    
             continue;
         }
         ptr = 0;
         printf("processing:%d...", i);
-        if (lens2[i] > 1)
+        if (versionsPerDoc[i] > 1)
         {
-            bool change = false; 
-            while (fscanf(f1, "%f\t%d\t%d\t%d\n", &lbuf[ptr].wsize, &lbuf[ptr].numDistinctFrags,  &lbuf[ptr].total, &lbuf[ptr].numPostings)>0)
+            bool change = false;
+            while (fscanf(currFile, "%d\t%d\t%d\t%d\n", 
+                &tradeoffs[ptr].numLevelsDown, 
+                &tradeoffs[ptr].numDistinctFrags,
+                &tradeoffs[ptr].numFragApplications,
+                &tradeoffs[ptr].numPostings) > 0)
             {
-                if (ptr > 0 && lbuf[ptr].numPostings != lbuf[ptr-1].numPostings)
+                if (ptr > 0 && tradeoffs[ptr].numPostings != tradeoffs[ptr-1].numPostings)
                 {
                     change = true;
                 }
                 ptr++;
             }
-            fclose(f1);
+
+            fclose(currFile);
+
             memset(fn, 0, 256);
             sprintf(fn, "test/convert-%d", i);
-            f1 = fopen(fn, "w");
-            qsort(lbuf, ptr, sizeof(linfo), comparep);
+            currFile = fopen(fn, "w");
+
+            qsort(tradeoffs, ptr, sizeof(TradeoffRecord), comparep);
+
             int ptr1 = 0;
             int ptr2 = 1;
             while (ptr2 < ptr)
             {
-                while (ptr2 < ptr && lbuf[ptr2].numPostings >= lbuf[ptr1].numPostings)
+                while (ptr2 < ptr && tradeoffs[ptr2].numPostings >= tradeoffs[ptr1].numPostings)
                     ptr2++;
 
                 if (ptr2 >= ptr)
                     break;
 
                 ptr1++;
-                lbuf[ptr1] = lbuf[ptr2];
+                tradeoffs[ptr1] = tradeoffs[ptr2];
                 ptr2++;
             }
-            ptr1++;
+            // ptr1++;
             
-            for (int j = 0; j < ptr1; j++)
-            {
-                fprintf(f1, "%.1f\t%d\t%d\t%d\n", lbuf[j].wsize, lbuf[j].total, lbuf[j].numDistinctFrags, lbuf[j].numPostings);
-            }
+            // Why are we looping here, and what is ptr1?
+            // for (int j = 0; j < ptr1; j++)
+            // {
+            //     fprintf(currFile, "%d\t%d\t%d\t%d\n", 
+            //         tradeoffs[j].numLevelsDown, 
+            //         tradeoffs[j].numFragApplications, 
+            //         tradeoffs[j].numDistinctFrags, 
+            //         tradeoffs[j].numPostings);
+            // }
             
-            fclose(f1);
-            fwrite(lbuf, sizeof(linfo), ptr1, f2);
+            fprintf(currFile, "%d\t%d\t%d\t%d\n", 
+                tradeoffs[ptr1].numLevelsDown, 
+                tradeoffs[ptr1].numDistinctFrags, 
+                tradeoffs[ptr1].numFragApplications, 
+                tradeoffs[ptr1].numPostings);
+
+
+            fclose(currFile);
+            fwrite(tradeoffs, sizeof(TradeoffRecord), ptr1, f2);
             lens[i] = ptr1;
             if (change == false)
             {
@@ -121,23 +156,23 @@ int main(int argc, char** argv)
         }
         else
         {
-            fclose(f1);
+            fclose(currFile);
             lens[i] = 1;
-            lbuf[0].wsize = dlens[wsize];
-            lbuf[0].total = 1;
-            lbuf[0].numDistinctFrags  = 1;
-            lbuf[0].numPostings = dlens[wsize];
-            fwrite(lbuf, sizeof(linfo), 1, f2);
+            tradeoffs[0].numLevelsDown = versionSizes[numLevelsDown]; // TODO i don't think the rhs is right
+            tradeoffs[0].numFragApplications = 1;
+            tradeoffs[0].numDistinctFrags  = 1;
+            tradeoffs[0].numPostings = versionSizes[numLevelsDown]; // TODO i don't think the rhs is right
+            fwrite(tradeoffs, sizeof(TradeoffRecord), 1, f2);
         }
-        wsize += lens2[i];
+        numLevelsDown += versionsPerDoc[i];
         printf("done!\n");
     }
 
     fclose(fexcept);
-    size = atoi(argv[1]);
-    FILE* fsize = fopen("linfos", "wb");
-    fwrite(&size,  sizeof(unsigned), 1, fsize);
-    fwrite(lens, sizeof(unsigned), size , fsize);
+    docCount = atoi(argv[1]);
+    FILE* fsize = fopen("TradeoffRecords", "wb");
+    fwrite(&docCount, sizeof(unsigned), 1, fsize);
+    fwrite(lens, sizeof(unsigned), docCount , fsize);
     fclose(fsize);
     fclose(f2);
     return 0;
