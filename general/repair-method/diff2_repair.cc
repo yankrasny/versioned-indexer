@@ -17,6 +17,7 @@
 using namespace std;
 
 GeneralPartitionAlgorithm* partitionAlgorithm;
+unsigned totalNumFragApps = 0;
 int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double>& paramArray)
 {
     char fn[256];
@@ -57,6 +58,7 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
         
         // Remember to clear all the data structures at end of each iteration
         // I did this but it took a lot of debugging, be careful -YK
+        
         for (int i = 0; i < paramArray.size(); i++)
         {
             iv* invertedLists = new iv[versions.size()];
@@ -75,6 +77,8 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
 
             tradeoffRecord.paramValue = paramValue;
             TradeoffTable.push_back(tradeoffRecord);
+
+            totalNumFragApps += tradeoffRecord.numFragApplications;
             fprintf(f, "%.2f\t%d\t%d\t%d\n",
                 paramValue,
                 tradeoffRecord.numDistinctFrags,
@@ -133,20 +137,32 @@ int main(int argc, char**argv)
     int* versionSizes = new int[totalNumVersions]; // versionSizes[i] is the length of version i (the number of word Ids)
     fread(versionSizes, sizeof(unsigned), totalNumVersions, fileWikiVersionSizes);
 
+    if (argc > 1)
+    {
+        // use this to test a small number of docs
+        docCount = atoi(argv[1]);
+    }
+
+    bool single = false;
+    if (argc > 2)
+    {
+        // use this to test a small number of docs
+        single = true;
+    }
+
     // The file contains one unsigned per line
-    ifstream fin("paramList.txt");
+    ifstream fin;
+    if (single) {
+        fin.open("paramSingle.txt");
+    } else {
+        fin.open("paramList.txt");
+    }
     istream_iterator<double> data_begin(fin);
     istream_iterator<double> data_end;
     vector<double> paramArray(data_begin, data_end);
     fin.close();
 
     int numVersionsReadSoFar = 0;
-
-    if (argc > 1)
-    {
-        // use this to test a small number of docs
-        docCount = atoi(argv[1]);
-    }
 
     // Gets populated in the loop below
     // fragmentCounts[i] is the number of fragments in the partitioning doc i
@@ -231,6 +247,16 @@ int main(int argc, char**argv)
 
     cerr << "Total time: " << timeInSeconds << endl;
     cerr << "Docs per second: " << docsPerSecond << endl;
+
+    char fn[256];
+    memset(fn, 0, 256);
+    sprintf(fn, "numFragApps");
+
+    FILE* fOut = fopen(fn, "w");
+    if (fOut) {
+        fprintf(fOut, "%u", totalNumFragApps);
+    }
+    fclose(fOut);
 
     delete partitionAlgorithm;
     return 0;

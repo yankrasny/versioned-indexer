@@ -15,7 +15,7 @@ using namespace std;
 
 indexer* myIndexer;
 GeneralPartitionAlgorithm* partitionAlgorithm;
-int dothejob(vector<vector<unsigned> >& versions, int docId, unsigned numLevelsDown)
+int dothejob(vector<vector<unsigned> >& versions, int docId, double paramValue)
 {
     iv* invertedLists = new iv[versions.size()];
     partitionAlgorithm->initRepair(versions);
@@ -26,11 +26,13 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, unsigned numLevelsD
     // Do repair and save the result in some form so that trees can be built for partitioning
     partitionAlgorithm->getRepairTrees();
 
-    partitionAlgorithm->init();    
+    partitionAlgorithm->init();
+
+    unsigned numLevelsDown = 10;
     
     unsigned numBaseFrags = partitionAlgorithm->getBaseFragments(invertedLists, versionsCopy, numLevelsDown);
-    partitionAlgorithm->addBaseFragmentsToHeap(numLevelsDown);
-    partitionAlgorithm->selectGoodFragments(invertedLists, numLevelsDown);
+    partitionAlgorithm->addBaseFragmentsToHeap(paramValue);
+    partitionAlgorithm->selectGoodFragments(invertedLists, paramValue);
     partitionAlgorithm->populatePostings(versions, docId);
 
     for (int i = 0; i < partitionAlgorithm->add_list_len; i++)
@@ -137,24 +139,26 @@ int main(int argc, char**argv)
         }
 
         if (!skipThisDoc) {
-            
-            // Run our partitioning algorithm with the chosen param value
-            unsigned numLevelsDown = 0;
+
             char fn[256];
             memset(fn, 0, 256);
-            sprintf(fn, "test/convert-%d", i);
-            FILE* currFile = fopen(fn, "r");
-            if (!currFile) {
+            sprintf(fn, "test/tradeoff-%d", i);
+
+            ifstream ifs;
+            ifs.open(fn, std::ifstream::in);
+            if (!ifs) {
                 printf("skipping:%d...\n", i);
                 continue;
             }
 
-            if (fscanf(currFile, "%d", &numLevelsDown) == 0) {
-                printf("Bad input, skipping:%d...\n", i);
+            double paramValue;
+            if (!(ifs >> paramValue)) {
+                printf("skipping:%d...\n", i);
                 continue;
             }
 
-            fragmentCounts[i] = dothejob(versions, i, numLevelsDown);
+            unsigned numLevelsDown = 10;
+            fragmentCounts[i] = dothejob(versions, i, paramValue);
             cerr << "Document " << i << ": processed" << endl;
         } else {
             fragmentCounts[i] = 0;
@@ -169,6 +173,7 @@ int main(int argc, char**argv)
         }
         versions.clear();
     }
+    exit(1);
 
     // Write index to disk
     myIndexer->dump();

@@ -1,4 +1,5 @@
 SOURCES = $(wildcard ../Repair-Partitioning/util/*.cpp) $(wildcard ../Repair-Partitioning/repair-algorithm/*.cpp) $(wildcard ../Repair-Partitioning/indexed-heap/*.cpp) $(wildcard ../Repair-Partitioning/partitioning/*.cpp) $(wildcard ../Repair-Partitioning/prototype/*.cpp)
+SOURCES_2 = $(wildcard tradeoff-heap/*.cpp)
 
 1:
 	g++ diff2_repair.cc libhash.a $(SOURCES) -o diff2_repair -g -std=c++0x
@@ -11,13 +12,13 @@ SOURCES = $(wildcard ../Repair-Partitioning/util/*.cpp) $(wildcard ../Repair-Par
 
 
 2:
-	g++ convert_repair.cc -o convert_repair -g -std=c++0x
+	g++ global_opt.cc $(SOURCES_2) -o global_opt -g -std=c++0x
 
 2opt:
-	g++ convert_repair.cc -o convert_repair -O3 -std=c++0x
+	g++ global_opt.cc $(SOURCES_2) -o global_opt -O3 -std=c++0x
 
 2prof:
-	g++ convert_repair.cc -o convert_repair -pg -std=c++0x
+	g++ global_opt.cc $(SOURCES_2) -o global_opt -pg -std=c++0x
 
 
 3:
