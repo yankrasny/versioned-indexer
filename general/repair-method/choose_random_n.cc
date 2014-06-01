@@ -45,6 +45,4 @@ int main(int argc, char**argv)
 		myfile << (*it) << "\n";
 	}
 	myfile.close();
-
-    // Now write the set of doc IDs to a file
 }

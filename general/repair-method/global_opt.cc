@@ -149,7 +149,7 @@ public:
 
     void fillHeap() {
         // Read the tradeoff tables for all the docs and fill the heap with entries based on those
-        for (int i = 0; i < numDocs; ++i) {
+        for (unsigned i = 0; i < numDocs; ++i) {
 
             // Every doc starts off with the first row active
             currRowIndexes.push_back(0);
@@ -255,7 +255,12 @@ public:
         // Write to a file that will be consumed by the indexing script
         TradeoffRecord rec;
         int totalPostings = 0;
-        for (int i = 0; i < currRowIndexes.size(); i++) {
+        for (unsigned i = 0; i < currRowIndexes.size(); i++) {
+
+            if (alreadyChosen.find(i) == alreadyChosen.end()) {
+                continue;
+            }
+
             TradeoffRecord rec = getCurrentRecord(i);
 
             if (rec.isValid) {
@@ -316,7 +321,6 @@ int main(int argc, char** argv)
     init = clock();
 
 
-    srand (time(NULL));
     auto alreadyChosen = set<unsigned>();
     initAlreadyChosen(alreadyChosen);
 

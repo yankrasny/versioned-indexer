@@ -183,13 +183,16 @@ int main(int argc, char**argv)
     unsigned totalWordsInVersion;
     bool skipThisDoc = false;
     unsigned numSkipped = 0;
-
-    srand (time(NULL));
+    
     auto alreadyChosen = set<unsigned>();
     initAlreadyChosen(alreadyChosen);
 
+    // for (auto it = alreadyChosen.begin(); it != alreadyChosen.end(); ++it) {
+    //     cerr << (*it) << endl;
+    // }
+
     // In this loop, i is the docId
-    for (size_t i = 0; i < totalDocs; ++i) // for each document -YK
+    for (unsigned i = 0; i < totalDocs; ++i) // for each document -YK
     {
         totalWordsInDoc = 0;
         totalWordsInVersion = 0;
@@ -207,6 +210,8 @@ int main(int argc, char**argv)
             //     skipThisDoc = false;
             // }
 
+            skipThisDoc = false;
+
             // Read the contents of the current version into a vector<unsigned>
             currentVersion.resize(totalWordsInVersion);
             inputWikiComplete.read(reinterpret_cast<char*>(&currentVersion[0]), currentVersion.size() * sizeof(unsigned));
@@ -222,7 +227,7 @@ int main(int argc, char**argv)
         }
 
         if (alreadyChosen.find(i) == alreadyChosen.end()) {
-            skipThisDoc  = true;
+            skipThisDoc = true;
         }
 
         // cerr << "Starting ID for Repair: " << currentWordID << endl;
@@ -233,7 +238,7 @@ int main(int argc, char**argv)
             cerr << "Document " << i << ": processed" << endl;
         } else {
             fragmentCounts[i] = 0;
-            cerr << "Document " << i << ": skipped" << endl;
+            // cerr << "Document " << i << ": skipped" << endl;
             ++numSkipped;
         }
         

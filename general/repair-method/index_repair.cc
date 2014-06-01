@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <map>
+#include <set>
 #include <fstream>
 #include "general_partition_repair.h"
 #include "../../util/indexer.h"
@@ -107,15 +107,23 @@ int main(int argc, char**argv)
     bool skipThisDoc = false;
     unsigned numSkipped = 0;
 
-    // See ../../util/indexer.h
-    unsigned maxTuplesPerBlock = 400000000;
-    unsigned typeLabel = numLevelsDown;
-    unsigned sizeLabel = totalDocs;
-    myIndexer = new indexer(maxTuplesPerBlock, typeLabel, sizeLabel);
 
-    srand (time(NULL));
     auto alreadyChosen = set<unsigned>();
     initAlreadyChosen(alreadyChosen);
+
+
+    // See ../../util/indexer.h
+    unsigned maxTuplesPerBlock = 1000000000;
+    unsigned typeLabel = numLevelsDown;
+    unsigned sizeLabel = alreadyChosen.size();
+    myIndexer = new indexer(maxTuplesPerBlock, typeLabel, sizeLabel);
+
+    
+    // if (alreadyChosen.find(874) == alreadyChosen.end()) {
+    //     cerr << "Could not find 874, but it should be there..." << endl;
+    //     cerr << *(alreadyChosen.find(874));
+    // }
+    // exit(0);
 
     // In this loop, i is the docId
     for (int i = 0; i < totalDocs; ++i) // for each document -YK
@@ -136,6 +144,8 @@ int main(int argc, char**argv)
             // } else {
             //     skipThisDoc = false;
             // }
+
+            skipThisDoc = false;
 
             // Read the contents of the current version into a vector<unsigned>
             currentVersion.resize(totalWordsInVersion);
@@ -178,7 +188,7 @@ int main(int argc, char**argv)
             cerr << "Document " << i << ": processed" << endl;
         } else {
             fragmentCounts[i] = 0;
-            cerr << "Document " << i << ": skipped" << endl;
+            // cerr << "Document " << i << ": skipped" << endl;
             ++numSkipped;
         }
         
