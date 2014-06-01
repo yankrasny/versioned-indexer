@@ -17,9 +17,12 @@ general2/
 Jstar/
 minWinnowing/
 wiki_access/
-util/
+util/word_size
+util/*.err
+util/*.out
 
 general/*.txt
 general/*.xlsx
 *.txt
 *.xlsx
+*.exe

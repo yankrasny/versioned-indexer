@@ -15,7 +15,7 @@ using namespace std;
 
 indexer* myIndexer;
 GeneralPartitionAlgorithm* partitionAlgorithm;
-int dothejob(vector<vector<unsigned> >& versions, int docId, double paramValue)
+int dothejob(vector<vector<unsigned> >& versions, int docId, double paramValue, unsigned numLevelsDown = 10)
 {
     iv* invertedLists = new iv[versions.size()];
     partitionAlgorithm->initRepair(versions);
@@ -28,8 +28,6 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, double paramValue)
 
     partitionAlgorithm->init();
 
-    unsigned numLevelsDown = 10;
-    
     unsigned numBaseFrags = partitionAlgorithm->getBaseFragments(invertedLists, versionsCopy, numLevelsDown);
     partitionAlgorithm->addBaseFragmentsToHeap(paramValue);
     partitionAlgorithm->selectGoodFragments(invertedLists, paramValue);
@@ -51,6 +49,15 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, double paramValue)
     return partitionAlgorithm->add_list_len;
 }
 
+void initAlreadyChosen(set<unsigned>& alreadyChosen) {
+    ifstream fin;
+    fin.open("docids.txt");
+    istream_iterator<unsigned> data_begin2(fin);
+    istream_iterator<unsigned> data_end2;
+    alreadyChosen = set<unsigned>(data_begin2, data_end2);
+    fin.close();
+}
+
 
 // External Ids for repair
 unsigned currentFragID = 0;
@@ -68,11 +75,11 @@ int main(int argc, char**argv)
     // FILE* fileWikiComplete = fopen("/data/jhe/wiki_access/completeFile", "rb");
     std::ifstream inputWikiComplete("/data/jhe/wiki_access/completeFile", std::ios::in | std::ifstream::binary);
 
-    int docCount;
-    fread(&docCount, sizeof(unsigned), 1, fileWikiDocSizes);
+    int totalDocs;
+    fread(&totalDocs, sizeof(unsigned), 1, fileWikiDocSizes);
 
-    int* numVersionsPerDoc = new int[docCount]; // number of versions for each document
-    fread(numVersionsPerDoc, sizeof(unsigned), docCount, fileWikiDocSizes);
+    int* numVersionsPerDoc = new int[totalDocs]; // number of versions for each document
+    fread(numVersionsPerDoc, sizeof(unsigned), totalDocs, fileWikiDocSizes);
     
     // I think this is the total number of versions in all docs
     unsigned totalNumVersions;
@@ -83,15 +90,17 @@ int main(int argc, char**argv)
 
     int numVersionsReadSoFar = 0;
 
-    if (argc > 1)
-    {
-        // use this to test a small number of docs
-        docCount = atoi(argv[1]);
-    }
+    // if (argc > 1)
+    // {
+    //     // use this to test a small number of docs
+    //     totalDocs = atoi(argv[1]);
+    // }
+
+    unsigned numLevelsDown = 8;
 
     // Gets populated in the loop below
     // fragmentCounts[i] is the number of fragments in the partitioning doc i
-    unsigned* fragmentCounts = new unsigned[docCount];
+    unsigned* fragmentCounts = new unsigned[totalDocs];
     auto versions = vector<vector<unsigned> >();
     unsigned totalWordsInDoc;
     unsigned totalWordsInVersion;
@@ -100,12 +109,16 @@ int main(int argc, char**argv)
 
     // See ../../util/indexer.h
     unsigned maxTuplesPerBlock = 400000000;
-    unsigned typeLabel = 50;
-    unsigned sizeLabel = 50;
+    unsigned typeLabel = numLevelsDown;
+    unsigned sizeLabel = totalDocs;
     myIndexer = new indexer(maxTuplesPerBlock, typeLabel, sizeLabel);
 
+    srand (time(NULL));
+    auto alreadyChosen = set<unsigned>();
+    initAlreadyChosen(alreadyChosen);
+
     // In this loop, i is the docId
-    for (int i = 0; i < docCount; ++i) // for each document -YK
+    for (int i = 0; i < totalDocs; ++i) // for each document -YK
     {
         totalWordsInDoc = 0;
         totalWordsInVersion = 0;
@@ -117,12 +130,12 @@ int main(int argc, char**argv)
         {
             totalWordsInVersion = versionSizes[numVersionsReadSoFar + v];
             totalWordsInDoc += totalWordsInVersion;
-            if (totalWordsInDoc > MAX_NUM_WORDS_PER_DOC)
-            {
-                skipThisDoc = true;
-            } else {
-                skipThisDoc = false;
-            }
+            // if (totalWordsInDoc > MAX_NUM_WORDS_PER_DOC)
+            // {
+            //     skipThisDoc = true;
+            // } else {
+            //     skipThisDoc = false;
+            // }
 
             // Read the contents of the current version into a vector<unsigned>
             currentVersion.resize(totalWordsInVersion);
@@ -138,11 +151,15 @@ int main(int argc, char**argv)
             ++currentWordID;
         }
 
+        if (alreadyChosen.find(i) == alreadyChosen.end()) {
+            skipThisDoc  = true;
+        }
+
         if (!skipThisDoc) {
 
             char fn[256];
             memset(fn, 0, 256);
-            sprintf(fn, "test/tradeoff-%d", i);
+            sprintf(fn, "test/convert-%d", i);
 
             ifstream ifs;
             ifs.open(fn, std::ifstream::in);
@@ -157,8 +174,7 @@ int main(int argc, char**argv)
                 continue;
             }
 
-            unsigned numLevelsDown = 10;
-            fragmentCounts[i] = dothejob(versions, i, paramValue);
+            fragmentCounts[i] = dothejob(versions, i, paramValue, numLevelsDown);
             cerr << "Document " << i << ": processed" << endl;
         } else {
             fragmentCounts[i] = 0;
@@ -173,7 +189,6 @@ int main(int argc, char**argv)
         }
         versions.clear();
     }
-    exit(1);
 
     // Write index to disk
     myIndexer->dump();

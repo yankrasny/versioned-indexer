@@ -1,6 +1,13 @@
 SOURCES = $(wildcard ../Repair-Partitioning/util/*.cpp) $(wildcard ../Repair-Partitioning/repair-algorithm/*.cpp) $(wildcard ../Repair-Partitioning/indexed-heap/*.cpp) $(wildcard ../Repair-Partitioning/partitioning/*.cpp) $(wildcard ../Repair-Partitioning/prototype/*.cpp)
 SOURCES_2 = $(wildcard tradeoff-heap/*.cpp)
 
+all: 0 1 2 3
+
+allopt: 0 1opt 2opt 3opt
+
+0:
+	g++ choose_random_n.cc -o choose -g -std=c++0x
+
 1:
 	g++ diff2_repair.cc libhash.a $(SOURCES) -o diff2_repair -g -std=c++0x
 

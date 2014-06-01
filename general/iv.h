@@ -3,12 +3,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <list>
-#include <map>
 #include "vb.h"
 #include "readwritebits.h"
-
-#define MAX_NUM_NODES 1000000;
+#include <list>
+#include <map>
 
 using namespace std;
 struct frag_ptr
@@ -19,7 +17,7 @@ struct frag_ptr
 
 bool operator == (const frag_ptr& f1, const frag_ptr& f2)
 {
-    if (f1.ptr == f2.ptr && f1.off == f2.off)
+    if ( f1.ptr == f2.ptr && f1.off == f2.off)
         return true;
     else
         return false;
@@ -40,7 +38,7 @@ int compareiv(const void* a1, const void* a2)
 
     int ret = n1->start - n2->start;
     int ret2 = n1->end - n2->end;
-    if (ret == 0)
+    if ( ret == 0)
         return ret2;
     else
         return ret;
@@ -52,10 +50,8 @@ public:
     iv()
     {
         nID = 0;
-
-        nbuf = new node[MAX_NUM_NODES];
-        sort_nbuf = new node[MAX_NUM_NODES];
-        inlist = NULL;
+        nbuf = new node[1000000];
+        sort_nbuf = new node[1000000];
     }
 
     ~iv()
@@ -92,17 +88,16 @@ public:
 
     int loadiv(unsigned char* buf)
     {
-        unsigned char* buf_ptr = buf;
+        unsigned char* buf_ptr =buf;
         int id;
         VBYTE_DECODE(buf_ptr, id);
         nID = id;
         inlist = new list<int>[id];
         nbuf = new node[id];
-        for (int i = 0; i < id; ++i)
-        {
+        for ( int i = 0; i < id;i++){
             int size;
             VBYTE_DECODE(buf_ptr, size);
-            for (int j = 0; j < size; ++j)
+            for ( int j = 0; j < size; j++)
             {
                 int k;
                 VBYTE_DECODE(buf_ptr, k);
@@ -110,30 +105,29 @@ public:
             }
         }
     }
-    
-    /* 
-     * insert a fragment information to the inverted list structure
-     */
-    int insert(const frag_ptr& fptr, int start, int end)
+/* 
+ * insert a fragment information to the inverted list structure
+ */
+    int insert(const frag_ptr& finfo, int start, int end)
     {
-        --end;
-        nbuf[nID].fptr = fptr;
+        end--;
+        nbuf[nID].fptr = finfo;
         nbuf[nID].start = start;
         nbuf[nID].end = end;
         nbuf[nID].nid = nID;
         sort_nbuf[nID] = nbuf[nID];
-        ++nID;
-        if (nID > MAX_NUM_NODES)
+        nID++;
+        if ( nID > 1000000)
         {
-            printf("Too many nodes in class iv...\n");
+            printf("memory out !\n");
             exit(0);
         }
-        return nbuf[nID - 1].nid;
+        return nbuf[nID-1].nid;
     }
 
     bool intersect(const node& n1, const node& n2)
     {
-        if (n1.start > n2.end || n1.end < n2.start)
+        if ( n1.start > n2.end || n1.end < n2.start)
             return false;
         else
             return true;
@@ -142,41 +136,38 @@ public:
     int complete()
     {
         inlist = new list<int>[nID];
-        for (int i = 0; i < nID; ++i)
+        for ( int i = 0; i < nID; i++)
         {
-            for (int j = i + 1; j < nID; ++j)
+            for ( int j = i+1; j < nID; j++)
             {
-                if (intersect(sort_nbuf[i], sort_nbuf[j]))
-                {
+                if ( intersect(sort_nbuf[i], sort_nbuf[j])){
                     int idx = sort_nbuf[i].nid;
                     int idx2 = sort_nbuf[j].nid;
                     inlist[idx].push_back(idx2);
                     inlist[idx2].push_back(idx);
                 }
                 //else
-                //	break;
+                //  break;
             }
         }
     }
 
-    int find_conflict(int nID, vector<FragmentApplication>& li, int idx, frag_ptr* fbuf)
+    int find_conflict(int nID, vector<p>& li, int idx, frag_ptr* fbuf)
     {
         int size = inlist[nID].size();
         list<int>::iterator its;
         int ptr = 0;
-        for (its = inlist[nID].begin(); its != inlist[nID].end(); its++)
+        for ( its = inlist[nID].begin(); its!=inlist[nID].end(); its++)
         {
             frag_ptr& fm = nbuf[*its].fptr;
             fbuf[ptr].ptr = fm.ptr;
             fbuf[ptr].off = fm.off;
-            if (idx == fm.ptr)
+            if ( idx == fm.ptr)
             {
                 li.at(fm.off).isVoid = true;
             }
             else
-            {
                 ptr++;
-            }
         }
         return ptr;
     }

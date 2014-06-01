@@ -54,7 +54,7 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
 
         double paramValue;
         unsigned numBaseFrags;
-        unsigned numLevelsDown = 10;
+        unsigned numLevelsDown = 8;
         
         // Remember to clear all the data structures at end of each iteration
         // I did this but it took a lot of debugging, be careful -YK
@@ -104,6 +104,14 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
     }
 }
 
+void initAlreadyChosen(set<unsigned>& alreadyChosen) {
+    ifstream fin;
+    fin.open("docids.txt");
+    istream_iterator<unsigned> data_begin2(fin);
+    istream_iterator<unsigned> data_end2;
+    alreadyChosen = set<unsigned>(data_begin2, data_end2);
+    fin.close();
+}
 
 // External Ids for repair
 unsigned currentFragID = 0;
@@ -124,11 +132,11 @@ int main(int argc, char**argv)
     // FILE* fileWikiComplete = fopen("/data/jhe/wiki_access/completeFile", "rb");
     std::ifstream inputWikiComplete("/data/jhe/wiki_access/completeFile", std::ios::in | std::ifstream::binary);
 
-    int docCount;
-    fread(&docCount, sizeof(unsigned), 1, fileWikiDocSizes);
+    int totalDocs;
+    fread(&totalDocs, sizeof(unsigned), 1, fileWikiDocSizes);
 
-    int* numVersionsPerDoc = new int[docCount]; // number of versions for each document
-    fread(numVersionsPerDoc, sizeof(unsigned), docCount, fileWikiDocSizes);
+    int* numVersionsPerDoc = new int[totalDocs]; // number of versions for each document
+    fread(numVersionsPerDoc, sizeof(unsigned), totalDocs, fileWikiDocSizes);
     
     // I think this is the total number of versions in all docs
     unsigned totalNumVersions;
@@ -137,14 +145,16 @@ int main(int argc, char**argv)
     int* versionSizes = new int[totalNumVersions]; // versionSizes[i] is the length of version i (the number of word Ids)
     fread(versionSizes, sizeof(unsigned), totalNumVersions, fileWikiVersionSizes);
 
-    if (argc > 1)
-    {
-        // use this to test a small number of docs
-        docCount = atoi(argv[1]);
-    }
+    // Commenting this out in favor of choose_random_n.cc, the docs are now a random sample -YK
+    // unsigned docCount = totalDocs;
+    // if (argc > 1)
+    // {
+    //     // use this to test a small number of docs
+    //     docCount = atoi(argv[1]);
+    // }
 
     bool single = false;
-    if (argc > 2)
+    if (argc > 1)
     {
         // use this to test a small number of docs
         single = true;
@@ -162,19 +172,24 @@ int main(int argc, char**argv)
     vector<double> paramArray(data_begin, data_end);
     fin.close();
 
+
     int numVersionsReadSoFar = 0;
 
     // Gets populated in the loop below
     // fragmentCounts[i] is the number of fragments in the partitioning doc i
-    unsigned* fragmentCounts = new unsigned[docCount];
+    unsigned* fragmentCounts = new unsigned[totalDocs];
     auto versions = vector<vector<unsigned> >();
     unsigned totalWordsInDoc;
     unsigned totalWordsInVersion;
     bool skipThisDoc = false;
     unsigned numSkipped = 0;
 
+    srand (time(NULL));
+    auto alreadyChosen = set<unsigned>();
+    initAlreadyChosen(alreadyChosen);
+
     // In this loop, i is the docId
-    for (size_t i = 0; i < docCount; ++i) // for each document -YK
+    for (size_t i = 0; i < totalDocs; ++i) // for each document -YK
     {
         totalWordsInDoc = 0;
         totalWordsInVersion = 0;
@@ -186,11 +201,11 @@ int main(int argc, char**argv)
         {
             totalWordsInVersion = versionSizes[numVersionsReadSoFar + v];
             totalWordsInDoc += totalWordsInVersion;
-            if (totalWordsInDoc > MAX_NUM_WORDS_PER_DOC) {
-                skipThisDoc = true;
-            } else {
-                skipThisDoc = false;
-            }
+            // if (totalWordsInDoc > MAX_NUM_WORDS_PER_DOC) {
+            //     skipThisDoc = true;
+            // } else {
+            //     skipThisDoc = false;
+            // }
 
             // Read the contents of the current version into a vector<unsigned>
             currentVersion.resize(totalWordsInVersion);
@@ -204,6 +219,10 @@ int main(int argc, char**argv)
                 }
             }
             ++currentWordID;
+        }
+
+        if (alreadyChosen.find(i) == alreadyChosen.end()) {
+            skipThisDoc  = true;
         }
 
         // cerr << "Starting ID for Repair: " << currentWordID << endl;
@@ -242,21 +261,23 @@ int main(int argc, char**argv)
     final = clock() - init;
 
     double timeInSeconds = (double)final / ((double)CLOCKS_PER_SEC);
-    int totalDocsProcessed = docCount - numSkipped;
+    int totalDocsProcessed = totalDocs - numSkipped;
     double docsPerSecond = (double)totalDocsProcessed / timeInSeconds;
 
     cerr << "Total time: " << timeInSeconds << endl;
     cerr << "Docs per second: " << docsPerSecond << endl;
 
-    char fn[256];
-    memset(fn, 0, 256);
-    sprintf(fn, "numFragApps");
+    if (single) {
+        char fn[256];
+        memset(fn, 0, 256);
+        sprintf(fn, "numFragApps");
 
-    FILE* fOut = fopen(fn, "w");
-    if (fOut) {
-        fprintf(fOut, "%u", totalNumFragApps);
+        FILE* fOut = fopen(fn, "w");
+        if (fOut) {
+            fprintf(fOut, "%u", totalNumFragApps);
+        }
+        fclose(fOut);
     }
-    fclose(fOut);
 
     delete partitionAlgorithm;
     return 0;

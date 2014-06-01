@@ -24,7 +24,7 @@ using namespace std;
 
 #define MAX_NUM_BASE_FRAGMENTS 200000
 #define MAX_NUM_FRAGMENTS 20000000
-#define MAX_NUM_WORDS_PER_DOC 500000
+#define MAX_NUM_WORDS_PER_DOC 1000000
 
 
 // This is a row in the tradeoff table (metadata vs index size)

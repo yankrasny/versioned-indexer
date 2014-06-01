@@ -18,7 +18,7 @@
 #include <vector>
 #include        "heap.h"
 #include        <cmath>
-#include	<algorithm>
+#include    <algorithm>
 
 #define MAXDIS 20000000
 
@@ -44,7 +44,7 @@ struct finfo
 };
 
 #include "iv.h"
-#include	"lowerpartition.h"
+#include    "lowerpartition.h"
 
 struct PCompare:public binary_function<frag_ptr, frag_ptr, bool>
 {
@@ -317,15 +317,14 @@ public:
         My version of fragment, works on all versions at once using RePair
 
         Params
-            int* buf becomes int** buf: the contents of all the versions
-
+            int** buf: the contents of all the versions
 
         Objectives
             Set bound_buf (same as offsetsAllVersions)
-            Set root (object type: iv, see iv.h): Looks like inverted list!
+            Set root (object type: iv, see iv.h)
 
     */
-    // int fragmentUsingRepair(int* buf, int* versionSizes, int numVersions, iv* root, unsigned minFragSize, unsigned repairStoppingPoint)
+    // int fragment(int* buf, int* versionSizes, int numVersions, iv* root, unsigned minFragSize, unsigned repairStoppingPoint)
     // {
     //     // Convert buf and versionSizes into a vector of vectors
     //     // Choosing to do this instead of changing the Repair code
@@ -367,7 +366,7 @@ public:
 
     /*
 
-        We need to make repair set these variables -yan
+        We need to make repair produce these variables -yan
 
         Example of wcounts, the size of each version. This means that version 0 contains 50 words, version 1 contains 52 words, etc.
         wcounts = [50, 52, 55, 49, 55]
@@ -377,11 +376,9 @@ public:
         int len: the length of the current version (wordIDs.size())
         int* mhbuf: hash stuff that I don't need
         int* hbuf: hash stuff that I don't need
-        iv* root: passed as &trees[i] (inverted list but why is it called root?)
-        int* w_size:
-        int wlen: size of w_size
-
-        par->fragment(i, &buf[wptr], wcounts[i], &mhbuf[hptr], &hbuf[hptr],  &trees[i], wsizes, total);
+        iv* root: passed as &trees[i]
+        int* w_size: 
+        int wlen: 
 
     */
     int fragment(int vid, int* refer, int len, int* mhbuf, int* hbuf, iv* root, int* w_size, int wlen) {
@@ -394,24 +391,6 @@ public:
         int block_num = 0;
         int error;
         int ep;
-
-        /*
-        TODO define:
-            w_size
-            bound_buf: the partition boundary buffer
-            total_level: the amount of iterations he's willing to optimize for, aka the # of times he calls the cutting alg
-            md5_buf: a buffer for storing fragment hashes?
-            type p (posting?)
-            infos: an array of finfo
-            block_info2
-
-        Sources:
-            docCutter.cut()
-            docCutter.cut3()
-            this class's vars
-
-
-        */
 
         int merge_size = 1;
         block_num = docCutter.cut(mhbuf, hbuf, len, w_size[wlen-1], bound_buf);
@@ -426,10 +405,8 @@ public:
         int counts = 0;
         while (counts < total_level)
         {
-            // for all the blocks returned by the cutting alg
             for ( int j = 0; j < block_num; j++)
             {
-                // Using refer as the version, so in ours, we need to pass a versionId!!!!!!!!!!
                 for ( int l = block_info2[j].start; l < block_info2[j].end; l++)
                     md5_buf[l - bound_buf[j]] = refer[l];
 
@@ -442,12 +419,9 @@ public:
                 lh = *((unsigned *)digest + 1) ;
                 ins = lookupHash (lh, hh, h[0]);
 
-                // Didn't find hash for this fragment
                 if (ins == -1) {
                     p p1;
                     p1.vid = vid;
-
-                    // TODO this can tell you a lot
                     p1.offset = block_info2[j].start;
                     p1.isVoid = false;
 
@@ -459,7 +433,6 @@ public:
                     fptr.ptr = ptr;
                     fptr.off = infos[ptr].size;
 
-                    // TODO what's nptr? look at the insert() function
                     p1.nptr = root->insert(fptr, block_info2[j].start, ep);
 
                     if ( p1.nptr != -1){
@@ -480,7 +453,7 @@ public:
                         fID++;
                     }
                 }
-                else { // has sharing block (or fragment as I call it -YK)
+                else { //has sharing block
 
                     frag_ptr fptr;
                     fptr.ptr = ins;
@@ -504,7 +477,7 @@ public:
             counts++;
             if ( prev_num == block_num)
                 break;
-        }	
+        }   
         return 0;
     }
 
@@ -584,17 +557,17 @@ private:
      * ***********************/
     hStruct *          h[W_SET];
     unsigned*          maxid; 
-    unsigned*          currid;          // current ID of ...
-    int*               bound_buf;       // the partition boundary buffer
-    unsigned*          md5_buf;         // 
-    finfo*             infos;           // an array of finfo
-    finfo*             infos2;          // an array of finfo
-    frag_ptr*          fbuf;            // an array of frag_ptr
-    int**              refer_ptrs;      // versions (so each inner array is like wordIDs for one version)
-    unsigned char**    refer_ptrs2;     // versions (so each inner array is like wordIDs for one version)
-    unsigned*          id_trans;        // 
-    unsigned*          selected_buf;    //
-    unsigned char*     tpbuf;           // 
+    unsigned*          currid; 
+    int*               bound_buf;       //the partition boundary buffer
+    unsigned*          md5_buf; 
+    finfo*             infos;
+    finfo*             infos2;
+    frag_ptr*          fbuf;
+    int**              refer_ptrs;
+    unsigned char**    refer_ptrs2;
+    unsigned*          id_trans;
+    unsigned*          selected_buf;
+    unsigned char*     tpbuf;
 };
 
 #endif /* PARTITION_H_ */

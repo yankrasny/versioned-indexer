@@ -52,11 +52,12 @@ int dothejob(int* buf, int* wcounts, int id, int vs, const vector<double>& wsize
     if (vs != 1)
     {
         memset(fn, 0, 256);
-        sprintf(fn, "/data4/jhe/proximity/model/test/%d", id);
+        sprintf(fn, "wsizes");
         FILE* f = fopen(fn, "r");
         int total = 1;
         int a,b,c,d,e,fs;
-        while ( fscanf(f, "%d\t%d\t%d\t%d\t%d\t%d\n", &a, &b, &c, &d, &e, &fs)>0){
+        //while ( fscanf(f, "%d\t%d\t%d\t%d\t%d\t%d\n", &a, &b, &c, &d, &e, &fs)>0){
+        while ( fscanf(f, "%d\n", &a) > 0) {
             wsizes[total] = a;
             total++;
         }

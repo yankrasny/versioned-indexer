@@ -15,17 +15,17 @@
  *
  * =====================================================================================
  */
-#include	<cstdio>
-#include	<cstdlib>
-#include	<cmath>
-#include	<algorithm>
-#include	<fstream>
-#include	<iostream>
+#include    <cstdio>
+#include    <cstdlib>
+#include    <cmath>
+#include    <algorithm>
+#include    <fstream>
+#include    <iostream>
 
 using namespace std;
 
 #ifndef  B
-#define	B 10			/*  */
+#define B 10            /*  */
 #endif
 #define MAXLENGTH 2905680
 
@@ -327,4 +327,3 @@ public:
         return ptr1;
     }
 };
-
