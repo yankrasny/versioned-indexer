@@ -16,6 +16,27 @@
 #include "general_partition_repair.h"
 using namespace std;
 
+// TODO test
+void initDocLocations(map<unsigned, unsigned long>& docLocations) {
+    // Read the whole list of doc locations into this set
+    FILE* fin = fopen("docoffsets.txt", "rb");
+    unsigned docId;
+    unsigned long offset;
+
+    // TODO THIS DOESN'T TERMINATE
+
+    while (!feof(fin)) {
+
+        int res = fread(&docId, sizeof(unsigned), 1, fin);
+        int res2 = fread(&offset, sizeof(unsigned long), 1, fin);
+
+    // while (fscanf(fin, "%u%u", &docId, &offset) == 2) {
+        docLocations.insert(std::pair<unsigned, unsigned long>(docId, offset));
+    }
+    fclose(fin);
+}
+
+
 GeneralPartitionAlgorithm* partitionAlgorithm;
 unsigned totalNumFragApps = 0;
 int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double>& paramArray)
@@ -65,7 +86,7 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, const vector<double
 
             partitionAlgorithm->init();
             
-            paramValue = paramArray[i];
+            paramValue = paramArray[docId];
 
             numBaseFrags = partitionAlgorithm->getBaseFragments(invertedLists, versionsCopy, numLevelsDown);
 
@@ -128,9 +149,7 @@ int main(int argc, char**argv)
     // Doc Sizes means number of versions in each doc
     FILE* fileWikiDocSizes = fopen("/data/jhe/wiki_access/numv", "rb");
     FILE* fileWikiVersionSizes = fopen("/data/jhe/wiki_access/word_size", "rb");
-    
-    // FILE* fileWikiComplete = fopen("/data/jhe/wiki_access/completeFile", "rb");
-    std::ifstream inputWikiComplete("/data/jhe/wiki_access/completeFile", std::ios::in | std::ifstream::binary);
+    FILE* fileWikiComplete = fopen("/data/jhe/wiki_access/completeFile", "rb");
 
     int totalDocs;
     fread(&totalDocs, sizeof(unsigned), 1, fileWikiDocSizes);
@@ -142,16 +161,8 @@ int main(int argc, char**argv)
     unsigned totalNumVersions;
     fread(&totalNumVersions, sizeof(unsigned), 1, fileWikiVersionSizes);
 
-    int* versionSizes = new int[totalNumVersions]; // versionSizes[i] is the length of version i (the number of word Ids)
+    int* versionSizes = new int[totalNumVersions]; // versionSizes[docId] is the length of version i (the number of word Ids)
     fread(versionSizes, sizeof(unsigned), totalNumVersions, fileWikiVersionSizes);
-
-    // Commenting this out in favor of choose_random_n.cc, the docs are now a random sample -YK
-    // unsigned docCount = totalDocs;
-    // if (argc > 1)
-    // {
-    //     // use this to test a small number of docs
-    //     docCount = atoi(argv[1]);
-    // }
 
     bool single = false;
     if (argc > 1)
@@ -172,49 +183,37 @@ int main(int argc, char**argv)
     vector<double> paramArray(data_begin, data_end);
     fin.close();
 
-
     int numVersionsReadSoFar = 0;
 
-    // Gets populated in the loop below
-    // fragmentCounts[i] is the number of fragments in the partitioning doc i
-    unsigned* fragmentCounts = new unsigned[totalDocs];
     auto versions = vector<vector<unsigned> >();
     unsigned totalWordsInDoc;
     unsigned totalWordsInVersion;
-    bool skipThisDoc = false;
-    unsigned numSkipped = 0;
     
-    auto alreadyChosen = set<unsigned>();
-    initAlreadyChosen(alreadyChosen);
+    auto docLocations = map<unsigned, unsigned long>();
+    initDocLocations(docLocations);
 
-    // for (auto it = alreadyChosen.begin(); it != alreadyChosen.end(); ++it) {
-    //     cerr << (*it) << endl;
-    // }
+    // This is an ordered set, expect it to go in sorted order
+    for (auto it = docLocations.begin(); it != docLocations.end(); ++it) {
+        // Read the docID and the offset from the file
+        unsigned docId = (*it).first;
+        unsigned long docOffset = (*it).second;
 
-    // In this loop, i is the docId
-    for (unsigned i = 0; i < totalDocs; ++i) // for each document -YK
-    {
-        totalWordsInDoc = 0;
-        totalWordsInVersion = 0;
-        currentWordID = 0; // This is a global used by repair, see repair-algorithm/Util.h
+        // We have the doc id and offset, seek to the offset and read that doc
+        fseek(fileWikiComplete, docOffset, 0);
 
-        // If you're confused about the line that reads into the vector, see: http://stackoverflow.com/questions/15143670/how-can-i-use-fread-on-a-binary-file-to-read-the-data-into-a-stdvector
+        // Time to read it
         auto currentVersion = vector<unsigned>();
-        for (size_t v = 0; v < numVersionsPerDoc[i]; ++v) // for each version in this doc
+
+        for (size_t v = 0; v < numVersionsPerDoc[docId]; ++v) // for each version in this doc
         {
             totalWordsInVersion = versionSizes[numVersionsReadSoFar + v];
             totalWordsInDoc += totalWordsInVersion;
-            // if (totalWordsInDoc > MAX_NUM_WORDS_PER_DOC) {
-            //     skipThisDoc = true;
-            // } else {
-            //     skipThisDoc = false;
-            // }
-
-            skipThisDoc = false;
 
             // Read the contents of the current version into a vector<unsigned>
             currentVersion.resize(totalWordsInVersion);
-            inputWikiComplete.read(reinterpret_cast<char*>(&currentVersion[0]), currentVersion.size() * sizeof(unsigned));
+            // inputWikiComplete.read(reinterpret_cast<char*>(&currentVersion[0]), currentVersion.size() * sizeof(unsigned));
+            fread(reinterpret_cast<char*>(&currentVersion[0]), sizeof(unsigned), currentVersion.size(), fileWikiComplete);
+
             versions.push_back(currentVersion);
 
             // Start with wordId 1 greater than the highest we've seen
@@ -226,37 +225,26 @@ int main(int argc, char**argv)
             ++currentWordID;
         }
 
-        if (alreadyChosen.find(i) == alreadyChosen.end()) {
-            skipThisDoc = true;
-        }
-
-        // cerr << "Starting ID for Repair: " << currentWordID << endl;
-
-        if (!skipThisDoc) {
-            // Run our partitioning algorithm with several different param values
-            fragmentCounts[i] = dothejob(versions, i, paramArray);
-            cerr << "Document " << i << ": processed" << endl;
-        } else {
-            fragmentCounts[i] = 0;
-            // cerr << "Document " << i << ": skipped" << endl;
-            ++numSkipped;
-        }
+        dothejob(versions, docId, paramArray);
         
-        numVersionsReadSoFar += numVersionsPerDoc[i];
+        cerr << "Document " << docId << ": processed" << endl;
+        
+        numVersionsReadSoFar += numVersionsPerDoc[docId];
 
-        for (size_t v = 0; v < numVersionsPerDoc[i]; ++v) {
+        for (size_t v = 0; v < numVersionsPerDoc[docId]; ++v) {
             versions[v].clear();
         }
         versions.clear();
     }
 
     cerr << "Param Selection Complete" << endl;
-    cerr << "Number of documents skipped: " << numSkipped << endl;
+    // cerr << "Number of documents skipped: " << numSkipped << endl;
 
     delete [] numVersionsPerDoc;
-    delete [] fragmentCounts;
+    // delete [] fragmentCounts;
 
-    inputWikiComplete.close();
+    // inputWikiComplete.close();
+    fclose(fileWikiComplete);
     fclose(fileWikiDocSizes);
     fclose(fileWikiVersionSizes);
 
@@ -266,7 +254,7 @@ int main(int argc, char**argv)
     final = clock() - init;
 
     double timeInSeconds = (double)final / ((double)CLOCKS_PER_SEC);
-    int totalDocsProcessed = totalDocs - numSkipped;
+    int totalDocsProcessed = totalDocs;
     double docsPerSecond = (double)totalDocsProcessed / timeInSeconds;
 
     cerr << "Total time: " << timeInSeconds << endl;

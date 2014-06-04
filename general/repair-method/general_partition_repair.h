@@ -438,6 +438,8 @@ public:
             /*
                 TODO What does this code do? We're encoding something and then
                 putting it into a file called frag_%d.info (see the end of this function)
+
+                Well, maybe... just maybe this is the meta data being written and compressed. Who the hell knows?
             */
 
             VBYTE_ENCODE(varbyteBufferPtr, len);            
@@ -459,10 +461,8 @@ public:
         for (int i = 0; i < versions.size(); i++)
         {
             fprintf(fbase_frag, "%d\n", base_frag);
+            base_frag += numSelectedFrags;
         }
-
-        // Was this line meant to be inside the loop?
-        base_frag += numSelectedFrags;
 
         // ok, now we're writing the varbyte encoded stuff somewhere, might be important
         fwrite(varbyteBuffer, sizeof(unsigned char), varbyteBufferPtr - varbyteBuffer, ffrag);

@@ -76,7 +76,7 @@ public:
         delete writer;
     }
 
-    // wordID, position?, docID
+    // wordID, positionID, docID
     void insert_term(int wordid, int pos, int docid)
     {
 

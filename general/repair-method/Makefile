@@ -36,3 +36,9 @@ allopt: 0 1opt 2opt 3opt
 
 3prof:
 	g++ index_repair.cc libhash.a $(SOURCES) -o index_repair -pg -std=c++0x
+
+4:
+	g++ get_doc_offsets.cc -o get_doc_offsets -g -std=c++0x
+
+4opt:
+	g++ get_doc_offsets.cc -o get_doc_offsets -O3 -std=c++0x

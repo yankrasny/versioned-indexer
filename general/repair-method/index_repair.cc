@@ -39,6 +39,19 @@ int dothejob(vector<vector<unsigned> >& versions, int docId, double paramValue, 
         // wid is wordID
         // pos is position
         // vid is versionID, and we're using version IDs as doc IDs
+
+        // Well, it seems we need to do a bit more here
+
+        /*
+            Index postings are word, position version, right?
+            Ok, so how does QP work? There must be a way to decide on a list of docs after running QP, not frags or versions.
+
+
+
+        */
+
+
+
         myIndexer->insert_term(
             partitionAlgorithm->add_list[i].wid, 
             partitionAlgorithm->add_list[i].pos,
@@ -66,6 +79,9 @@ unsigned currentOffset = 0;
 
 int main(int argc, char**argv)
 {
+    clock_t init, final;
+    init = clock();
+    
     partitionAlgorithm = new GeneralPartitionAlgorithm();
     
     // Doc Sizes means number of versions in each doc
@@ -111,9 +127,12 @@ int main(int argc, char**argv)
     auto alreadyChosen = set<unsigned>();
     initAlreadyChosen(alreadyChosen);
 
+    // in case we can't read the files or something, just use a value somewhere in the middle
+    double defaultParamValue = 1.0;
+
 
     // See ../../util/indexer.h
-    unsigned maxTuplesPerBlock = 1000000000;
+    unsigned maxTuplesPerBlock = 10000;
     unsigned typeLabel = numLevelsDown;
     unsigned sizeLabel = alreadyChosen.size();
     myIndexer = new indexer(maxTuplesPerBlock, typeLabel, sizeLabel);
@@ -138,14 +157,12 @@ int main(int argc, char**argv)
         {
             totalWordsInVersion = versionSizes[numVersionsReadSoFar + v];
             totalWordsInDoc += totalWordsInVersion;
-            // if (totalWordsInDoc > MAX_NUM_WORDS_PER_DOC)
-            // {
-            //     skipThisDoc = true;
-            // } else {
-            //     skipThisDoc = false;
-            // }
-
-            skipThisDoc = false;
+            if (totalWordsInDoc > MAX_NUM_WORDS_PER_DOC)
+            {
+                skipThisDoc = true;
+            } else {
+                skipThisDoc = false;
+            }
 
             // Read the contents of the current version into a vector<unsigned>
             currentVersion.resize(totalWordsInVersion);
@@ -171,17 +188,15 @@ int main(int argc, char**argv)
             memset(fn, 0, 256);
             sprintf(fn, "test/convert-%d", i);
 
+            double paramValue;
             ifstream ifs;
             ifs.open(fn, std::ifstream::in);
-            if (!ifs) {
-                printf("skipping:%d...\n", i);
-                continue;
-            }
-
-            double paramValue;
-            if (!(ifs >> paramValue)) {
-                printf("skipping:%d...\n", i);
-                continue;
+            if (ifs && (ifs >> paramValue)) {
+                // reading the param worked
+            } else {
+                // reading the param didn't work so use the default
+                printf("Using default value for doc %d...\n", i);
+                paramValue = defaultParamValue;
             }
 
             fragmentCounts[i] = dothejob(versions, i, paramValue, numLevelsDown);
@@ -206,6 +221,15 @@ int main(int argc, char**argv)
     cerr << "Indexing Complete" << endl;
     cerr << "Number of documents skipped: " << numSkipped << endl;
 
+    final = clock() - init;
+
+    double timeInSeconds = (double)final / ((double)CLOCKS_PER_SEC);
+    int totalDocsProcessed = totalDocs - numSkipped;
+    double docsPerSecond = (double)totalDocsProcessed / timeInSeconds;
+
+    cerr << "Total time: " << timeInSeconds << endl;
+    cerr << "Docs per second: " << docsPerSecond << endl;
+
     delete [] numVersionsPerDoc;
     delete [] fragmentCounts;
 
@@ -216,6 +240,6 @@ int main(int argc, char**argv)
     FILE* successFile = fopen("SUCCESS INDEX!", "w");
     fclose(successFile);
 
-    delete partitionAlgorithm;
+    // delete partitionAlgorithm;
     return 0;
 }
